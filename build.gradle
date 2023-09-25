@@ -1,0 +1,14 @@
+plugins {
+    id 'java'
+}
+
+group 'me.ayunami2000.ayunViaProxyEagUtils'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation files("libs/ViaProxy-3.0.21-SNAPSHOT+java8_PATCHED.jar")
+}
