@@ -28,6 +28,7 @@ public class Main extends ViaProxyPlugin {
     }
 
     static class EaglerConnectionHandler extends ChannelInboundHandlerAdapter {
+        @Override
         public void userEventTriggered(final ChannelHandlerContext ctx, final Object evt) throws Exception {
             super.userEventTriggered(ctx, evt);
             if (evt instanceof EaglercraftInitialHandler.EaglercraftClientConnected) {
@@ -35,12 +36,15 @@ public class Main extends ViaProxyPlugin {
                 ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-utils-init", new EaglerUtilsInitHandler());
             }
         }
+
+        @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             ExceptionUtil.handleNettyException(ctx, cause, null);
         }
     }
 
     static class EaglerUtilsInitHandler extends ChannelInboundHandlerAdapter {
+        @Override
         public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
             if (msg instanceof BinaryWebSocketFrame) {
                 final ByteBuf bb = ((BinaryWebSocketFrame) msg).content();
@@ -60,6 +64,8 @@ public class Main extends ViaProxyPlugin {
             ctx.pipeline().remove("ayun-eag-utils-init");
             super.channelRead(ctx, msg);
         }
+
+        @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             ExceptionUtil.handleNettyException(ctx, cause, null);
         }

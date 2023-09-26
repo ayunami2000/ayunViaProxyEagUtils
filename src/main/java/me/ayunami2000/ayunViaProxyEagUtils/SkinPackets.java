@@ -1,8 +1,11 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
 import io.netty.channel.ChannelHandlerContext;
+import net.raphimc.viaproxy.cli.options.Options;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.UUID;
 
 public class SkinPackets {
@@ -18,7 +21,9 @@ public class SkinPackets {
                     break;
                 }
                 case 6: {
-                    processGetOtherSkinByURL();
+                    if (EaglerXSkinHandler.skinService.loadPremiumSkins) {
+                        processGetOtherSkinByURL(data, sender, skinService);
+                    }
                     break;
                 }
                 default: {
@@ -40,15 +45,42 @@ public class SkinPackets {
         skinService.processGetOtherSkin(searchUUID, sender);
     }
 
-    private static void processGetOtherSkinByURL() throws IOException {
-        throw new IOException("Skin URLs not implemented");
+    private static void processGetOtherSkinByURL(byte[] data, ChannelHandlerContext sender, SkinService skinService) throws IOException {
+        if(data.length < 20) {
+            throw new IOException("Invalid length " + data.length + " for skin request packet");
+        }
+        UUID searchUUID = bytesToUUID(data, 1);
+        int urlLength = (data[17] << 8) | data[18];
+        if(data.length < 19 + urlLength) {
+            throw new IOException("Invalid length " + data.length + " for skin request packet with " + urlLength + " length URL");
+        }
+        String urlStr = bytesToAscii(data, 19, urlLength);
+        urlStr = SkinService.sanitizeTextureURL(urlStr);
+        if(urlStr == null) {
+            throw new IOException("Invalid URL for skin request packet");
+        }
+        URL url;
+        try {
+            url = new URL(urlStr);
+        }catch(MalformedURLException t) {
+            throw new IOException("Invalid URL for skin request packet", t);
+        }
+        String host = url.getHost();
+        if(host.equalsIgnoreCase("textures.minecraft.net")) {
+            UUID validUUID = createEaglerURLSkinUUID(urlStr);
+            if(!searchUUID.equals(validUUID)) {
+                throw new IOException("Invalid generated UUID from skin URL");
+            }
+            skinService.processGetOtherSkin(searchUUID, urlStr, sender);
+        }else {
+            throw new IOException("Invalid host in skin packet: " + host);
+        }
     }
 
     public static void registerEaglerPlayer(final UUID clientUUID, final byte[] bs, final SkinService skinService) throws IOException {
         if (bs.length == 0) {
             throw new IOException("Zero-length packet recieved");
         }
-        int skinModel = -1;
         final int packetType = bs[0] & 0xFF;
         byte[] generatedPacket;
         switch (packetType) {
@@ -66,7 +98,7 @@ public class SkinPackets {
                 }
                 setAlphaForChest(pixels, (byte) (-1));
                 System.arraycopy(bs, 2, pixels, 0, pixels.length);
-                generatedPacket = makeCustomResponse(clientUUID, skinModel = (bs[1] & 0xFF), pixels);
+                generatedPacket = makeCustomResponse(clientUUID, bs[1] & 0xFF, pixels);
                 break;
             }
             default: {
@@ -74,6 +106,18 @@ public class SkinPackets {
             }
         }
         skinService.registerEaglercraftPlayer(clientUUID, generatedPacket);
+    }
+
+    public static byte[] asciiString(String string) {
+        byte[] str = new byte[string.length()];
+        for(int i = 0; i < str.length; ++i) {
+            str[i] = (byte)string.charAt(i);
+        }
+        return str;
+    }
+
+    public static UUID createEaglerURLSkinUUID(String skinUrl) {
+        return UUID.nameUUIDFromBytes(asciiString("EaglercraftSkinURL:" + skinUrl));
     }
 
     public static void registerEaglerPlayerFallback(final UUID clientUUID, final SkinService skinService) throws IOException {
@@ -115,6 +159,14 @@ public class SkinPackets {
         ret[17] = (byte) model;
         System.arraycopy(pixels, 0, ret, 18, pixels.length);
         return ret;
+    }
+
+    public static String bytesToAscii(byte[] bytes, int off, int len) {
+        char[] ret = new char[len];
+        for(int i = 0; i < len; ++i) {
+            ret[i] = (char)((int)bytes[off + i] & 0xFF);
+        }
+        return new String(ret);
     }
 
     public static UUID bytesToUUID(final byte[] bytes, final int off) {

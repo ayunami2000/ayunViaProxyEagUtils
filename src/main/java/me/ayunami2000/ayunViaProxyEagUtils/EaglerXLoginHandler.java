@@ -15,10 +15,13 @@ public class EaglerXLoginHandler extends ChannelOutboundHandlerAdapter {
         this.counter = 0;
     }
 
+    @Override
+    @SuppressWarnings("deprecation")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ExceptionUtil.handleNettyException(ctx, cause, null);
     }
 
+    @Override
     public void write(final ChannelHandlerContext ctx, final Object msg, final ChannelPromise promise) throws Exception {
         if (msg instanceof BinaryWebSocketFrame) {
             final ByteBuf bb = ((BinaryWebSocketFrame) msg).content();

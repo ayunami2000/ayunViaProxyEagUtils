@@ -206,7 +206,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                         throw new IllegalStateException("Unexpected packet id " + packetId + " in state " + this.state);
                     }
                     final String username = data.readCharSequence(data.readUnsignedByte(), StandardCharsets.US_ASCII).toString();
-                    data.readCharSequence(data.readUnsignedByte(), StandardCharsets.US_ASCII).toString();
+                    data.readCharSequence(data.readUnsignedByte(), StandardCharsets.US_ASCII);
                     data.skipBytes(data.readUnsignedByte());
                     if (data.isReadable()) {
                         throw new IllegalArgumentException("Too much data in packet: " + data.readableBytes() + " bytes");
@@ -224,7 +224,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                 case LOGIN: {
                     final int packetId = data.readUnsignedByte();
                     if (packetId == 7) {
-                        data.readCharSequence(data.readUnsignedByte(), StandardCharsets.US_ASCII).toString();
+                        data.readCharSequence(data.readUnsignedByte(), StandardCharsets.US_ASCII);
                         final byte[] dataBytes = new byte[data.readUnsignedShort()];
                         data.readBytes(dataBytes);
                         if (data.isReadable()) {

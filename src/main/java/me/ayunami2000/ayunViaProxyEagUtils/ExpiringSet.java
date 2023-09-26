@@ -1,25 +1,20 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.AbstractSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class ExpiringSet<T> extends HashSet<T> {
+public class ExpiringSet<T> extends AbstractSet<T> {
+    private final Set<T> realSet;
     private final long expiration;
-    private final ExpiringEvent<T> event;
     private final Map<T, Long> timestamps;
 
     public ExpiringSet(final long expiration) {
-        this.timestamps = new HashMap<>();
+        this.realSet = ConcurrentHashMap.newKeySet();
+        this.timestamps = new ConcurrentHashMap<>();
         this.expiration = expiration;
-        this.event = null;
-    }
-
-    public ExpiringSet(final long expiration, final ExpiringEvent<T> event) {
-        this.timestamps = new HashMap<>();
-        this.expiration = expiration;
-        this.event = event;
     }
 
     public void checkForExpirations() {
@@ -27,23 +22,20 @@ public class ExpiringSet<T> extends HashSet<T> {
         final long now = System.currentTimeMillis();
         while (iterator.hasNext()) {
             final T element = iterator.next();
-            if (super.contains(element)) {
+            if (this.realSet.contains(element)) {
                 if (this.timestamps.get(element) + this.expiration >= now) {
                     continue;
                 }
-                if (this.event != null) {
-                    this.event.onExpiration(element);
-                }
             }
             iterator.remove();
-            super.remove(element);
+            this.realSet.remove(element);
         }
     }
 
     @Override
     public boolean add(final T o) {
         this.checkForExpirations();
-        final boolean success = super.add(o);
+        final boolean success = this.realSet.add(o);
         if (success) {
             this.timestamps.put(o, System.currentTimeMillis());
         }
@@ -53,7 +45,7 @@ public class ExpiringSet<T> extends HashSet<T> {
     @Override
     public boolean remove(final Object o) {
         this.checkForExpirations();
-        final boolean success = super.remove(o);
+        final boolean success = this.realSet.remove(o);
         if (success) {
             this.timestamps.remove(o);
         }
@@ -63,16 +55,24 @@ public class ExpiringSet<T> extends HashSet<T> {
     @Override
     public void clear() {
         this.timestamps.clear();
-        super.clear();
+        this.realSet.clear();
+    }
+
+    @Override
+    public Iterator<T> iterator() {
+        this.checkForExpirations();
+        return this.realSet.iterator();
+    }
+
+    @Override
+    public int size() {
+        this.checkForExpirations();
+        return this.realSet.size();
     }
 
     @Override
     public boolean contains(final Object o) {
         this.checkForExpirations();
-        return super.contains(o);
-    }
-
-    public interface ExpiringEvent<T> {
-        void onExpiration(final T p0);
+        return this.realSet.contains(o);
     }
 }

@@ -18,6 +18,7 @@ import java.util.List;
 public class EaglercraftInitialHandler extends ByteToMessageDecoder {
     private static SslContext sslContext;
 
+    @Override
     protected void decode(final ChannelHandlerContext ctx, final ByteBuf in, final List<Object> out) {
         if (!ctx.channel().isOpen()) {
             return;
@@ -64,6 +65,7 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
         }
     }
 
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ExceptionUtil.handleNettyException(ctx, cause, null);
     }

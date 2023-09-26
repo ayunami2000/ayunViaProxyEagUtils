@@ -1,17 +1,26 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
+import com.google.gson.JsonObject;
+import com.viaversion.viaversion.util.GsonUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
+import net.raphimc.vialoader.util.VersionEnum;
+import net.raphimc.viaproxy.ViaProxy;
+import net.raphimc.viaproxy.cli.options.Options;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
+import javax.imageio.ImageIO;
+import java.awt.image.DataBufferByte;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -41,10 +50,12 @@ public class EaglerSkinHandler extends ChannelInboundHandlerAdapter {
         this.user = username;
     }
 
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ExceptionUtil.handleNettyException(ctx, cause, null);
     }
 
+    @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object obj) throws Exception {
         final UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + this.user).getBytes(StandardCharsets.UTF_8));
         if (!EaglerSkinHandler.users.containsKey(uuid) && ctx.channel().isActive()) {
@@ -102,6 +113,48 @@ public class EaglerSkinHandler extends ChannelInboundHandlerAdapter {
                                     conc = conc2;
                                 }
                                 sendData(ctx, "EAG|UserSkin", conc);
+                            } else if (EaglerXSkinHandler.skinService.loadPremiumSkins) {
+                                try {
+                                    URL url = new URL("https://playerdb.co/api/player/minecraft/" + fetch);
+                                    URLConnection urlConnection = url.openConnection();
+                                    urlConnection.setRequestProperty("user-agent", "Mozilla/5.0 ViaProxy/" + ViaProxy.VERSION);
+                                    JsonObject json = GsonUtil.getGson().fromJson(new InputStreamReader(urlConnection.getInputStream()), JsonObject.class);
+                                    if (json.get("success").getAsBoolean()) {
+                                        String premiumUUID = json.getAsJsonObject("data").getAsJsonObject("player").getAsJsonObject("meta").get("id").getAsString();
+                                        byte[] tmp = EaglerXSkinHandler.skinService.fetchSkinPacket(uuidFetch, "https://crafatar.com/skins/" + premiumUUID);
+                                        if (tmp != null) {
+                                            EaglerXSkinHandler.skinService.registerEaglercraftPlayer(uuidFetch, tmp);
+                                            if ((data = EaglerSkinHandler.skinCollection.get(uuidFetch)) != null) {
+                                                byte[] conc = new byte[data.length + 2];
+                                                conc[0] = msg[0];
+                                                conc[1] = msg[1];
+                                                System.arraycopy(data, 0, conc, 2, data.length);
+                                                if ((data = EaglerSkinHandler.capeCollection.get(uuidFetch)) != null) {
+                                                    final byte[] conc2 = new byte[conc.length + data.length];
+                                                    System.arraycopy(conc, 0, conc2, 0, conc.length);
+                                                    System.arraycopy(data, 0, conc2, conc.length, data.length);
+                                                    conc = conc2;
+                                                } else {
+                                                    try {
+                                                        tmp = ((DataBufferByte) ImageIO.read(new URL("https://crafatar.com/capes/" + premiumUUID)).getRaster().getDataBuffer()).getData();
+                                                        data = new byte[4098];
+                                                        data[0] = data[1] = 0;
+                                                        // todo: figure out if we need to shuffle around colors
+                                                        System.arraycopy(tmp, 0, data, 2, tmp.length);
+                                                        EaglerSkinHandler.capeCollection.put(uuid, data);
+                                                        final byte[] conc2 = new byte[conc.length + data.length];
+                                                        System.arraycopy(conc, 0, conc2, 0, conc.length);
+                                                        System.arraycopy(data, 0, conc2, conc.length, data.length);
+                                                        conc = conc2;
+                                                    } catch (Exception ignored) {
+                                                    }
+                                                }
+                                                sendData(ctx, "EAG|UserSkin", conc);
+                                            }
+                                        }
+                                    }
+                                } catch (Exception ignored) {
+                                }
                             }
                         }
                         bb.release();
@@ -143,6 +196,7 @@ public class EaglerSkinHandler extends ChannelInboundHandlerAdapter {
         super.channelRead(ctx, obj);
     }
 
+    @Override
     public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
         final UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + this.user).getBytes(StandardCharsets.UTF_8));

@@ -38,12 +38,14 @@ public class EaglerVoiceHandler extends ChannelInboundHandlerAdapter {
         this.user = username;
     }
 
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ExceptionUtil.handleNettyException(ctx, cause, null);
     }
 
+    @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object obj) throws Exception {
-        if (((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).state == EaglercraftHandler.State.LOGIN_COMPLETE && !ctx.channel().hasAttr((AttributeKey) EaglerVoiceHandler.VOICE_ENABLED)) {
+        if (((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).state == EaglercraftHandler.State.LOGIN_COMPLETE && !ctx.channel().hasAttr(EaglerVoiceHandler.VOICE_ENABLED)) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
             final DataOutputStream dos = new DataOutputStream(baos);
             dos.write(0);
@@ -54,7 +56,7 @@ public class EaglerVoiceHandler extends ChannelInboundHandlerAdapter {
             }
             sendData(ctx, baos.toByteArray());
             this.sendVoicePlayers(this.user);
-            ctx.channel().attr((AttributeKey) EaglerVoiceHandler.VOICE_ENABLED).set(true);
+            ctx.channel().attr(EaglerVoiceHandler.VOICE_ENABLED).set(true);
         }
         if (obj instanceof BinaryWebSocketFrame) {
             final ByteBuf bb = ((BinaryWebSocketFrame) obj).content();
@@ -222,6 +224,7 @@ public class EaglerVoiceHandler extends ChannelInboundHandlerAdapter {
         super.channelRead(ctx, obj);
     }
 
+    @Override
     public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
         this.removeUser(this.user);
@@ -233,13 +236,13 @@ public class EaglerVoiceHandler extends ChannelInboundHandlerAdapter {
                 final ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 final DataOutputStream dos = new DataOutputStream(baos);
                 dos.write(5);
-                final Set<String> mostlyGlobalPlayers = new HashSet<>();
+                final Set<String> mostlyGlobalPlayers = ConcurrentHashMap.newKeySet();
                 for (final String username : EaglerVoiceHandler.voicePlayers.keySet()) {
                     if (!username.equals(name) && EaglerVoiceHandler.voicePairs.stream().noneMatch(pair -> (pair[0].equals(name) && pair[1].equals(username)) || (pair[0].equals(username) && pair[1].equals(name)))) {
                         mostlyGlobalPlayers.add(username);
                     }
                 }
-                if (mostlyGlobalPlayers.size() > 0) {
+                if (!mostlyGlobalPlayers.isEmpty()) {
                     dos.writeInt(mostlyGlobalPlayers.size());
                     for (final String username : mostlyGlobalPlayers) {
                         dos.writeUTF(username);
@@ -293,8 +296,8 @@ public class EaglerVoiceHandler extends ChannelInboundHandlerAdapter {
         EaglerVoiceHandler.iceServers.add("stun:stun3.l.google.com:19302");
         EaglerVoiceHandler.iceServers.add("stun:stun4.l.google.com:19302");
         EaglerVoiceHandler.iceServers.add("stun:openrelay.metered.ca:80");
-        final Map<String, Object> turnServerList = new HashMap<>();
-        HashMap<String, Object> n = new HashMap<>();
+        final Map<String, Map<String, String>> turnServerList = new HashMap<>();
+        HashMap<String, String> n = new HashMap<>();
         n.put("url", "turn:openrelay.metered.ca:80");
         n.put("username", "openrelayproject");
         n.put("password", "openrelayproject");
@@ -309,12 +312,9 @@ public class EaglerVoiceHandler extends ChannelInboundHandlerAdapter {
         n.put("username", "openrelayproject");
         n.put("password", "openrelayproject");
         turnServerList.put("openrelay3", n);
-        for (final Map.Entry<String, Object> trn : turnServerList.entrySet()) {
-            final Object o = trn.getValue();
-            if (o instanceof Map) {
-                final Map o2 = (Map) o;
-                EaglerVoiceHandler.iceServers.add("" + o2.get("url") + ";" + o2.get("username") + ";" + o2.get("password"));
-            }
+        for (final Map.Entry<String, Map<String, String>> trn : turnServerList.entrySet()) {
+            final Map<String, String> o = trn.getValue();
+            EaglerVoiceHandler.iceServers.add(o.get("url") + ";" + o.get("username") + ";" + o.get("password"));
         }
         VOICE_ENABLED = AttributeKey.valueOf("ayun-voice-enabled");
     }

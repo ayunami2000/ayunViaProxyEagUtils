@@ -6,21 +6,32 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.packet.PacketTypes;
+import net.raphimc.vialegacy.ViaLegacy;
+import net.raphimc.vialegacy.ViaLegacyConfig;
+import net.raphimc.vialoader.util.VersionEnum;
+import net.raphimc.viaproxy.ViaProxy;
+import net.raphimc.viaproxy.cli.options.Options;
 
 import javax.imageio.ImageIO;
 import java.awt.image.DataBufferByte;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.Map;
+import java.net.URI;
+import java.net.URL;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SkinService {
+    public final boolean loadPremiumSkins;
     private final ConcurrentHashMap<UUID, CachedSkin> skinCache;
 
     public SkinService() {
         this.skinCache = new ConcurrentHashMap<>();
+        File funnyFile = new File("ViaLoader", "eaglerskins.yml");
+        FunnyConfig funnyConfig = new FunnyConfig(funnyFile);
+        funnyConfig.reloadConfig();
+        this.loadPremiumSkins = funnyConfig.getPremiumSkins();
     }
 
     private static void sendData(final ChannelHandlerContext ctx, final byte[] data) {
@@ -61,6 +72,51 @@ public class SkinService {
             }
             sendData(sender, SkinPackets.makeCustomResponse(searchUUID, 0, res));
         } else {
+            processGetOtherSkin(searchUUID, "https://crafatar.com/skins/" + searchUUID.toString(), sender);
+        }
+    }
+
+    public byte[] fetchSkinPacket(final UUID searchUUID, final String skinURL) {
+        // no rate-limit or size limit. it is assumed that this feature is used privately anyway.
+        final CachedSkin cached = this.skinCache.get(searchUUID);
+        if (cached != null) {
+            return cached.packet;
+        } else {
+            try {
+                byte[] res = ((DataBufferByte) ImageIO.read(new URL(skinURL)).getRaster().getDataBuffer()).getData();
+                if (res.length == 8192) {
+                    final int[] tmp1 = new int[2048];
+                    final int[] tmp2 = new int[4096];
+                    for (int i = 0; i < tmp1.length; ++i) {
+                        tmp1[i] = Ints.fromBytes(res[i * 4 + 3], res[i * 4], res[i * 4 + 1], res[i * 4 + 2]);
+                    }
+                    SkinConverter.convert64x32to64x64(tmp1, tmp2);
+                    res = new byte[16384];
+                    for (int i = 0; i < tmp2.length; ++i) {
+                        System.arraycopy(Ints.toByteArray(tmp2[i]), 0, res, i * 4, 4);
+                    }
+                    for (int j = 0; j < res.length; j += 4) {
+                        final byte tmp3 = res[j];
+                        res[j] = res[j + 1];
+                        res[j + 1] = res[j + 2];
+                        res[j + 2] = res[j + 3];
+                        res[j + 3] = tmp3;
+                    }
+                }
+                byte[] pkt = SkinPackets.makeCustomResponse(searchUUID, 0, res);
+                registerEaglercraftPlayer(searchUUID, pkt);
+                return pkt;
+            } catch (IOException ignored) {
+                return null;
+            }
+        }
+    }
+
+    public void processGetOtherSkin(final UUID searchUUID, final String skinURL, final ChannelHandlerContext sender) {
+        final byte[] skin = fetchSkinPacket(searchUUID, skinURL);
+        if (skin != null) {
+            sendData(sender, skin);
+        } else {
             sendData(sender, SkinPackets.makePresetResponse(searchUUID));
         }
     }
@@ -70,7 +126,7 @@ public class SkinService {
         EaglerSkinHandler.skinCollection.put(clientUUID, newToOldSkin(generatedPacket));
     }
 
-    private static byte[] newToOldSkin(final byte[] packet) throws IOException {
+    public static byte[] newToOldSkin(final byte[] packet) throws IOException {
         final byte type = packet[0];
         byte[] res;
         switch (type) {
@@ -124,6 +180,58 @@ public class SkinService {
         protected CachedSkin(final UUID uuid, final byte[] packet) {
             this.uuid = uuid;
             this.packet = packet;
+        }
+    }
+
+    public static String sanitizeTextureURL(String url) {
+        try {
+            URI uri = URI.create(url);
+            StringBuilder builder = new StringBuilder();
+            String scheme = uri.getScheme();
+            if(scheme == null) {
+                return null;
+            }
+            String host = uri.getHost();
+            if(host == null) {
+                return null;
+            }
+            scheme = scheme.toLowerCase();
+            builder.append(scheme).append("://");
+            builder.append(host);
+            int port = uri.getPort();
+            if(port != -1) {
+                switch(scheme) {
+                    case "http":
+                        if(port == 80) {
+                            port = -1;
+                        }
+                        break;
+                    case "https":
+                        if(port == 443) {
+                            port = -1;
+                        }
+                        break;
+                    default:
+                        return null;
+                }
+                if(port != -1) {
+                    builder.append(":").append(port);
+                }
+            }
+            String path = uri.getRawPath();
+            if(path != null) {
+                if(path.contains("//")) {
+                    path = String.join("/", path.split("[\\/]+"));
+                }
+                int len = path.length();
+                if(len > 1 && path.charAt(len - 1) == '/') {
+                    path = path.substring(0, len - 1);
+                }
+                builder.append(path);
+            }
+            return builder.toString();
+        }catch(Throwable t) {
+            return null;
         }
     }
 }

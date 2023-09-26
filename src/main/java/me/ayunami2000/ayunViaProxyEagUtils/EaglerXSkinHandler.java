@@ -8,8 +8,6 @@ import net.raphimc.netminecraft.packet.PacketTypes;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,10 +22,12 @@ public class EaglerXSkinHandler extends ChannelInboundHandlerAdapter {
         this.pluginMessageId = -1;
     }
 
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         ExceptionUtil.handleNettyException(ctx, cause, null);
     }
 
+    @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object obj) throws Exception {
         final EaglercraftHandler.State state = ((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).state;
         if (state == EaglercraftHandler.State.LOGIN && obj instanceof BinaryWebSocketFrame) {
@@ -94,6 +94,7 @@ public class EaglerXSkinHandler extends ChannelInboundHandlerAdapter {
         super.channelRead(ctx, obj);
     }
 
+    @Override
     public void channelInactive(final ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
         if (this.user != null) {
