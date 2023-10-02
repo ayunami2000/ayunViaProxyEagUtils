@@ -9,7 +9,10 @@ import java.util.List;
 import java.util.Map;
 
 public class FunnyConfig extends Config {
-    private boolean premiumSkins = false;
+    public static boolean premiumSkins = false;
+    public static boolean eaglerUtils = true;
+    public static boolean eaglerSkins = true;
+    public static boolean eaglerVoice = true;
 
     protected FunnyConfig(File configFile) {
         super(configFile);
@@ -17,23 +20,31 @@ public class FunnyConfig extends Config {
 
     @Override
     public URL getDefaultConfigURL() {
-        return Main.class.getResource("/eaglerskins.yml");
+        return Main.class.getResource("/vpeagutils.yml");
     }
 
     @Override
     protected void handleConfig(Map<String, Object> map) {
         Object item = map.get("premium-skins");
         if (item instanceof Boolean) {
-            this.premiumSkins = (Boolean) item;
+            premiumSkins = (Boolean) item;
+        }
+        item = map.get("eagler-utils");
+        if (item instanceof Boolean) {
+            eaglerUtils = (Boolean) item;
+        }
+        item = map.get("eagler-skins");
+        if (item instanceof Boolean) {
+            eaglerSkins = (Boolean) item;
+        }
+        item = map.get("eagler-voice");
+        if (item instanceof Boolean) {
+            eaglerVoice = (Boolean) item;
         }
     }
 
     @Override
     public List<String> getUnsupportedOptions() {
         return Collections.emptyList();
-    }
-
-    public boolean getPremiumSkins() {
-        return this.premiumSkins;
     }
 }

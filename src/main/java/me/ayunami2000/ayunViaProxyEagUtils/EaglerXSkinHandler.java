@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class EaglerXSkinHandler extends ChannelInboundHandlerAdapter {
     private final ConcurrentHashMap<String, byte[]> profileData;
-    public static final SkinService skinService;
+    public static SkinService skinService;
     private String user;
     private int pluginMessageId;
 
@@ -63,15 +63,17 @@ public class EaglerXSkinHandler extends ChannelInboundHandlerAdapter {
         }
         if (this.user == null) {
             this.user = ((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).username;
-            final UUID clientUUID = UUID.nameUUIDFromBytes(("OfflinePlayer:" + this.user).getBytes(StandardCharsets.UTF_8));
-            if (this.profileData.containsKey("skin_v1")) {
-                try {
-                    SkinPackets.registerEaglerPlayer(clientUUID, this.profileData.get("skin_v1"), EaglerXSkinHandler.skinService);
-                } catch (Throwable ex) {
+            if (FunnyConfig.eaglerSkins) {
+                final UUID clientUUID = UUID.nameUUIDFromBytes(("OfflinePlayer:" + this.user).getBytes(StandardCharsets.UTF_8));
+                if (this.profileData.containsKey("skin_v1")) {
+                    try {
+                        SkinPackets.registerEaglerPlayer(clientUUID, this.profileData.get("skin_v1"), EaglerXSkinHandler.skinService);
+                    } catch (Throwable ex) {
+                        SkinPackets.registerEaglerPlayerFallback(clientUUID, EaglerXSkinHandler.skinService);
+                    }
+                } else {
                     SkinPackets.registerEaglerPlayerFallback(clientUUID, EaglerXSkinHandler.skinService);
                 }
-            } else {
-                SkinPackets.registerEaglerPlayerFallback(clientUUID, EaglerXSkinHandler.skinService);
             }
         }
         if (this.pluginMessageId <= 0) {
@@ -100,9 +102,5 @@ public class EaglerXSkinHandler extends ChannelInboundHandlerAdapter {
         if (this.user != null) {
             EaglerXSkinHandler.skinService.unregisterPlayer(UUID.nameUUIDFromBytes(("OfflinePlayer:" + this.user).getBytes(StandardCharsets.UTF_8)));
         }
-    }
-
-    static {
-        skinService = new SkinService();
     }
 }

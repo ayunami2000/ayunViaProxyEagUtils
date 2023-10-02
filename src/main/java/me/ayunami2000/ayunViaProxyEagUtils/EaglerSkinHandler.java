@@ -77,6 +77,10 @@ public class EaglerSkinHandler extends ChannelInboundHandlerAdapter {
                 }
                 try {
                     if ("EAG|MySkin".equals(tag)) {
+                        if (!FunnyConfig.eaglerSkins) {
+                            bb.release();
+                            return;
+                        }
                         if (!EaglerSkinHandler.skinCollection.containsKey(uuid)) {
                             final int t = msg[0] & 0xFF;
                             if (t < EaglerSkinHandler.SKIN_DATA_SIZE.length && msg.length == EaglerSkinHandler.SKIN_DATA_SIZE[t] + 1) {
@@ -87,6 +91,10 @@ public class EaglerSkinHandler extends ChannelInboundHandlerAdapter {
                         return;
                     }
                     if ("EAG|MyCape".equals(tag)) {
+                        if (!FunnyConfig.eaglerSkins) {
+                            bb.release();
+                            return;
+                        }
                         if (!EaglerSkinHandler.capeCollection.containsKey(uuid)) {
                             final int t = msg[0] & 0xFF;
                             if (t < EaglerSkinHandler.CAPE_DATA_SIZE.length && msg.length == EaglerSkinHandler.CAPE_DATA_SIZE[t] + 2) {
@@ -113,7 +121,7 @@ public class EaglerSkinHandler extends ChannelInboundHandlerAdapter {
                                     conc = conc2;
                                 }
                                 sendData(ctx, "EAG|UserSkin", conc);
-                            } else if (EaglerXSkinHandler.skinService.loadPremiumSkins) {
+                            } else if (FunnyConfig.premiumSkins) {
                                 try {
                                     URL url = new URL("https://playerdb.co/api/player/minecraft/" + fetch);
                                     URLConnection urlConnection = url.openConnection();

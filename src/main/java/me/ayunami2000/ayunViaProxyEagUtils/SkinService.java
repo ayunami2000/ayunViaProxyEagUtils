@@ -6,15 +6,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.packet.PacketTypes;
-import net.raphimc.vialegacy.ViaLegacy;
-import net.raphimc.vialegacy.ViaLegacyConfig;
-import net.raphimc.vialoader.util.VersionEnum;
-import net.raphimc.viaproxy.ViaProxy;
-import net.raphimc.viaproxy.cli.options.Options;
 
 import javax.imageio.ImageIO;
 import java.awt.image.DataBufferByte;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -23,15 +17,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SkinService {
-    public final boolean loadPremiumSkins;
     private final ConcurrentHashMap<UUID, CachedSkin> skinCache;
 
     public SkinService() {
         this.skinCache = new ConcurrentHashMap<>();
-        File funnyFile = new File("ViaLoader", "eaglerskins.yml");
-        FunnyConfig funnyConfig = new FunnyConfig(funnyFile);
-        funnyConfig.reloadConfig();
-        this.loadPremiumSkins = funnyConfig.getPremiumSkins();
     }
 
     private static void sendData(final ChannelHandlerContext ctx, final byte[] data) {

@@ -78,6 +78,10 @@ public class EaglerVoiceHandler extends ChannelInboundHandlerAdapter {
                         super.channelRead(ctx, obj);
                         return;
                     }
+                    if (!FunnyConfig.eaglerVoice) {
+                        bb.release();
+                        return;
+                    }
                     final DataInputStream streamIn = new DataInputStream(new ByteArrayInputStream(msg));
                     final int sig = streamIn.read();
                     switch (sig) {

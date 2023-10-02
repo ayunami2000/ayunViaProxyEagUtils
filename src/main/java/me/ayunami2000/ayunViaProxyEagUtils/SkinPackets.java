@@ -21,7 +21,7 @@ public class SkinPackets {
                     break;
                 }
                 case 6: {
-                    if (EaglerXSkinHandler.skinService.loadPremiumSkins) {
+                    if (FunnyConfig.premiumSkins) {
                         processGetOtherSkinByURL(data, sender, skinService);
                     }
                     break;

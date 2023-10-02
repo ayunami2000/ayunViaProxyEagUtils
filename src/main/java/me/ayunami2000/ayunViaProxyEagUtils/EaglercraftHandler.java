@@ -15,6 +15,7 @@ import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
+import io.netty.util.AttributeKey;
 import net.lenni0451.mcstructs.text.serializer.TextComponentSerializer;
 import net.raphimc.netminecraft.constants.ConnectionState;
 import net.raphimc.netminecraft.constants.MCPackets;
@@ -24,6 +25,7 @@ import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ServerboundP
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
 import net.raphimc.vialoader.util.VersionEnum;
 import net.raphimc.viaproxy.ViaProxy;
+import net.raphimc.viaproxy.proxy.client2proxy.Client2ProxyChannelInitializer;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 import net.raphimc.viaproxy.util.logging.Logger;
 
@@ -38,6 +40,15 @@ import java.util.List;
 import java.util.UUID;
 
 public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, ByteBuf> {
+    public static class ProfileData {
+        public final String type;
+        public final byte[] data;
+        public ProfileData(String type, byte[] data) {
+            this.type = type;
+            this.data = data;
+        }
+    }
+    public static final AttributeKey<ProfileData> profileDataKey = AttributeKey.newInstance("eagx-profile-data");
     private HostAndPort host;
     public State state;
     public VersionEnum version;
@@ -50,7 +61,9 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
 
     public void channelActive(final ChannelHandlerContext ctx) throws Exception {
         ctx.channel().attr(MCPipeline.COMPRESSION_THRESHOLD_ATTRIBUTE_KEY).set(-2);
-        ctx.pipeline().remove("sizer");
+        if (ctx.pipeline().get(MCPipeline.SIZER_HANDLER_NAME) != null) {
+            ctx.pipeline().remove(MCPipeline.SIZER_HANDLER_NAME);
+        }
         super.channelActive(ctx);
     }
 
@@ -224,12 +237,13 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                 case LOGIN: {
                     final int packetId = data.readUnsignedByte();
                     if (packetId == 7) {
-                        data.readCharSequence(data.readUnsignedByte(), StandardCharsets.US_ASCII);
+                        String type = data.readCharSequence(data.readUnsignedByte(), StandardCharsets.US_ASCII).toString();
                         final byte[] dataBytes = new byte[data.readUnsignedShort()];
                         data.readBytes(dataBytes);
                         if (data.isReadable()) {
                             throw new IllegalArgumentException("Too much data in packet: " + data.readableBytes() + " bytes");
                         }
+                        ctx.channel().attr(profileDataKey).set(new ProfileData(type, dataBytes));
                     } else {
                         if (packetId != 8) {
                             throw new IllegalStateException("Unexpected packet id " + packetId + " in state " + this.state);
@@ -244,8 +258,8 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                             ctx.close();
                             return;
                         }
-                        if (ctx.pipeline().get("legacy-passthrough-handler") != null) {
-                            ctx.pipeline().remove("legacy-passthrough-handler");
+                        if (ctx.pipeline().get(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME) != null) {
+                            ctx.pipeline().remove(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME);
                         }
                         out.add(this.writeHandshake(ctx.alloc().buffer(), ConnectionState.LOGIN));
                         final ByteBuf loginHello = ctx.alloc().buffer();
@@ -265,10 +279,12 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                             ctx.channel().writeAndFlush(new BinaryWebSocketFrame(data.readerIndex(0).retain()));
                             break;
                         }
-                        if (packetId == ServerboundPackets1_5_2.PLUGIN_MESSAGE.getId() && Types1_6_4.STRING.read(data).startsWith("EAG|")) {
-                            break;
+                        if (!ctx.channel().hasAttr(Main.secureWs)) {
+                            if (packetId == ServerboundPackets1_5_2.PLUGIN_MESSAGE.getId() && Types1_6_4.STRING.read(data).startsWith("EAG|")) {
+                                break;
+                            }
                         }
-                    } else if (this.version.isNewerThanOrEqualTo(VersionEnum.r1_7_2tor1_7_5)) {
+                    } else if (this.version.isNewerThanOrEqualTo(VersionEnum.r1_7_2tor1_7_5) && !ctx.channel().hasAttr(Main.secureWs)) {
                         final int packetId = PacketTypes.readVarInt(data);
                         if (packetId == this.pluginMessageId && PacketTypes.readString(data, 32767).startsWith("EAG|")) {
                             break;
@@ -295,8 +311,8 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
             }
             this.state = State.STATUS;
             this.version = VersionEnum.r1_8;
-            if (ctx.pipeline().get("legacy-passthrough-handler") != null) {
-                ctx.pipeline().remove("legacy-passthrough-handler");
+            if (ctx.pipeline().get(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME) != null) {
+                ctx.pipeline().remove(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME);
             }
             out.add(this.writeHandshake(ctx.alloc().buffer(), ConnectionState.STATUS));
             final ByteBuf statusRequest = ctx.alloc().buffer();
@@ -312,7 +328,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                 ctx.close();
                 return;
             }
-            this.host = HostAndPort.fromString(handshake.requestHeaders().get("Host")).withDefaultPort(80);
+            this.host = HostAndPort.fromString(handshake.requestHeaders().get("Host").replaceAll("__", ".")).withDefaultPort(80);
         }
         super.userEventTriggered(ctx, evt);
     }
