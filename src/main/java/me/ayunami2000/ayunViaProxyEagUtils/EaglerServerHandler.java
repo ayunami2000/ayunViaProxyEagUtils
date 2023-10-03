@@ -5,9 +5,9 @@ import com.viaversion.viaversion.util.ChatColorUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
-import io.netty.handler.codec.http.websocketx.*;
+import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.netty.connection.NetClient;
 import net.raphimc.netminecraft.packet.PacketTypes;
@@ -20,7 +20,9 @@ import net.raphimc.viaproxy.proxy.session.ProxyConnection;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFrame, ByteBuf> {
     private final VersionEnum version;
@@ -231,6 +233,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
                         return;
                     }
                     // TODO: FIX LOL!!
+                    // also todo: handle status packets
                     byte[] res = new byte[msg.length > 16384 ? 16384 : 8192];
                     System.arraycopy(msg, 1, res, 0, res.length);
                     if (res.length < 16384) {

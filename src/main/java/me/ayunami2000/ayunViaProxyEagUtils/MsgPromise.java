@@ -1,6 +1,5 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 
 public class MsgPromise {

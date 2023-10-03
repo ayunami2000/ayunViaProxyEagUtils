@@ -1,7 +1,6 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
 import io.netty.channel.ChannelHandlerContext;
-import net.raphimc.viaproxy.cli.options.Options;
 
 import java.io.IOException;
 import java.net.MalformedURLException;

@@ -7,9 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
-import net.raphimc.vialoader.util.VersionEnum;
 import net.raphimc.viaproxy.ViaProxy;
-import net.raphimc.viaproxy.cli.options.Options;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import javax.imageio.ImageIO;

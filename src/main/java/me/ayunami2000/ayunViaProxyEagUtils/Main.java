@@ -1,9 +1,14 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http.websocketx.*;
+import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
+import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
+import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import io.netty.handler.codec.http.websocketx.extensions.compression.WebSocketClientCompressionHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.AttributeKey;
@@ -20,7 +25,6 @@ import net.raphimc.viaproxy.plugins.events.Proxy2ServerChannelInitializeEvent;
 import net.raphimc.viaproxy.plugins.events.types.ITyped;
 import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
-import net.raphimc.viaproxy.proxy.util.ChannelUtil;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import javax.net.ssl.*;
@@ -91,7 +95,7 @@ public class Main extends ViaProxyPlugin {
 
 
 
-            c2p.attr(secureWs).set(true);
+            // c2p.attr(secureWs).set(true);
 
 
 

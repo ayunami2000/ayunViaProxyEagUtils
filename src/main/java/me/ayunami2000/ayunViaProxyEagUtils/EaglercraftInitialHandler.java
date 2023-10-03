@@ -63,9 +63,10 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
                                     for (Map.Entry<String, ChannelHandler> entry : ctx.pipeline()) {
                                         if (entry.getKey().equals(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME)) {
                                             fard = true;
-                                        }
-                                        if (fard) {
-                                            ctx.pipeline().remove(entry.getValue());
+                                        } else {
+                                            if (fard) {
+                                                ctx.pipeline().remove(entry.getValue());
+                                            }
                                         }
                                     }
 
@@ -76,11 +77,9 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
                                     } catch (IllegalAccessException | InvocationTargetException e) {
                                         throw new RuntimeException(e);
                                     }
-                                    try {
-                                        ((ChannelInboundHandler) ctx.pipeline().get(MCPipeline.HANDLER_HANDLER_NAME)).channelRead(ctx, msg.retain());
-                                    } catch (Exception e) {
-                                        throw new RuntimeException(e);
-                                    }
+                                    ctx.fireChannelActive();
+                                    ctx.fireChannelRead(msg.retain());
+                                    ctx.pipeline().remove(this);
                                 } else {
                                     ctx.pipeline().remove(this);
                                     ctx.pipeline().fireChannelRead(msg.retain());
