@@ -10,7 +10,6 @@ import java.util.Map;
 
 public class FunnyConfig extends Config {
     public static boolean premiumSkins = false;
-    public static boolean eaglerUtils = true;
     public static boolean eaglerSkins = true;
     public static boolean eaglerVoice = true;
 
@@ -28,10 +27,6 @@ public class FunnyConfig extends Config {
         Object item = map.get("premium-skins");
         if (item instanceof Boolean) {
             premiumSkins = (Boolean) item;
-        }
-        item = map.get("eagler-utils");
-        if (item instanceof Boolean) {
-            eaglerUtils = (Boolean) item;
         }
         item = map.get("eagler-skins");
         if (item instanceof Boolean) {

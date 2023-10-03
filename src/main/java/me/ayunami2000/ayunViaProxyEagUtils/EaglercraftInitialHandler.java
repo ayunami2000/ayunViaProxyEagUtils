@@ -16,9 +16,9 @@ import net.raphimc.netminecraft.constants.MCPipeline;
 import net.raphimc.viaproxy.plugins.PluginManager;
 import net.raphimc.viaproxy.plugins.events.Client2ProxyHandlerCreationEvent;
 import net.raphimc.viaproxy.proxy.client2proxy.Client2ProxyChannelInitializer;
+import net.raphimc.viaproxy.proxy.client2proxy.passthrough.LegacyPassthroughInitialHandler;
 import net.raphimc.viaproxy.proxy.client2proxy.passthrough.PassthroughClient2ProxyChannelInitializer;
 import net.raphimc.viaproxy.proxy.client2proxy.passthrough.PassthroughClient2ProxyHandler;
-import net.raphimc.viaproxy.proxy.client2proxy.passthrough.PassthroughInitialHandler;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import java.io.File;
@@ -52,7 +52,7 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-handler", new WebSocketServerProtocolHandler("/", null, true));
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-active-notifier", new WebSocketActiveNotifier());
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "eaglercraft-handler", new EaglercraftHandler());
-                ctx.pipeline().replace(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, new PassthroughInitialHandler() {
+                ctx.pipeline().replace(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, new LegacyPassthroughInitialHandler() {
                     @Override
                     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
                         if (ctx.channel().isOpen()) {

@@ -1,6 +1,7 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
 import com.google.common.primitives.Ints;
+import com.viaversion.viaversion.util.ChatColorUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -14,10 +15,10 @@ import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ClientboundP
 import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ServerboundPackets1_5_2;
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
 import net.raphimc.vialoader.util.VersionEnum;
+import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -25,7 +26,6 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
     private final VersionEnum version;
     private final String password;
     private final NetClient proxyConnection;
-    private final Map<UUID, String> uuidStringMap = new HashMap<>();
     private final List<UUID> skinsBeingFetched = new ArrayList<>();
     private ByteBuf serverBoundPartialPacket = Unpooled.EMPTY_BUFFER;
     private ByteBuf clientBoundPartialPacket = Unpooled.EMPTY_BUFFER;
@@ -96,11 +96,8 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
     }
 
     public void encodeOld(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
-        if (handshakeState == 0) {
-            handshakeState = 1;
-            if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 2) {
-                in.setByte(1, in.getUnsignedByte(1) + 8);
-            }
+        if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 2) {
+            in.setByte(1, in.getUnsignedByte(1) + 8);
         }
         if (in.readableBytes() >= 1 && in.getUnsignedByte(0) == 0xFD) {
             return;
@@ -108,42 +105,9 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
         if (in.readableBytes() >= 3 && in.getUnsignedByte(0) == 250) {
             in.skipBytes(1);
             String tag;
-            byte[] msg;
             try {
                 tag = Types1_6_4.STRING.read(in);
                 if (tag.equals("EAG|Skins-1.8")) {
-                    msg = new byte[in.readShort()];
-                    in.readBytes(msg);
-                    if (msg.length == 0) {
-                        throw new IOException("Zero-length packet recieved");
-                    }
-                    final int packetId = msg[0] & 0xFF;
-                    switch (packetId) {
-                        case 3: {
-                            if (msg.length != 17) {
-                                throw new IOException("Invalid length " + msg.length + " for skin request packet");
-                            }
-                            final UUID searchUUID = SkinPackets.bytesToUUID(msg, 1);
-                            if (uuidStringMap.containsKey(searchUUID)) {
-                                // skinsBeingFetched.add(searchUUID);
-                                String name = uuidStringMap.get(searchUUID);
-                                ByteBuf bb = ctx.alloc().buffer();
-                                bb.writeByte((byte) 250);
-                                Types1_6_4.STRING.write(bb, "EAG|FetchSkin"); // todo: get to work
-                                bb.writeByte((byte) 0);
-                                bb.writeByte((byte) 0);
-                                bb.writeBytes(name.getBytes(StandardCharsets.UTF_8));
-                                out.add(new BinaryWebSocketFrame(bb));
-                            }
-                            break;
-                        }
-                        case 6: {
-                            break;
-                        }
-                        default: {
-                            throw new IOException("Unknown packet type " + packetId);
-                        }
-                    }
                     return;
                 }
             } catch (Exception ignored) {
@@ -228,7 +192,18 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
             try {
                 String name = Types1_6_4.STRING.read(in);
                 UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
-                uuidStringMap.put(uuid, name);
+                skinsBeingFetched.add(uuid);
+                ByteBuf bb = ctx.alloc().buffer();
+                bb.writeByte((byte) 250);
+                Types1_6_4.STRING.write(bb, "EAG|FetchSkin");
+                ByteBuf bbb = ctx.alloc().buffer();
+                bbb.writeByte((byte) 0);
+                bbb.writeByte((byte) 0);
+                bbb.writeBytes(name.getBytes(StandardCharsets.UTF_8));
+                bb.writeShort(bbb.readableBytes());
+                bb.writeBytes(bbb);
+                bbb.release();
+                ctx.writeAndFlush(new BinaryWebSocketFrame(bb));
             } catch (Exception ignored) {
             }
             in.resetReaderIndex();
@@ -240,20 +215,25 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
             ctx.writeAndFlush(new BinaryWebSocketFrame(in.retain()));
             return;
         }
-        if (!skinsBeingFetched.isEmpty() && in.readableBytes() >= 3 && in.getUnsignedByte(0) == 250) {
+        if (in.readableBytes() >= 3 && in.getUnsignedByte(0) == 250) {
             in.skipBytes(1);
             String tag;
             byte[] msg;
             try {
                 tag = Types1_6_4.STRING.read(in);
-                // System.out.println(tag);
                 if (tag.equals("EAG|UserSkin")) {
+                    if (skinsBeingFetched.isEmpty()) {
+                        return;
+                    }
                     msg = new byte[in.readShort()];
                     in.readBytes(msg);
-                    System.out.println(msg.length);
-                    byte[] res = new byte[msg.length - 1];
+                    if (msg.length < 8192) {
+                        return;
+                    }
+                    // TODO: FIX LOL!!
+                    byte[] res = new byte[msg.length > 16384 ? 16384 : 8192];
                     System.arraycopy(msg, 1, res, 0, res.length);
-                    if (res.length == 8192) {
+                    if (res.length < 16384) {
                         final int[] tmp1 = new int[2048];
                         final int[] tmp2 = new int[4096];
                         for (int i = 0; i < tmp1.length; ++i) {
@@ -273,11 +253,27 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
                             res[j] = tmp3;
                         }
                     }
-                    in.writerIndex(1);
-                    Types1_6_4.STRING.write(in, "EAG|Skins-1.8");
+                    ByteBuf bb = ctx.alloc().buffer();
+                    bb.writeByte((byte) 250);
+                    Types1_6_4.STRING.write(bb, "EAG|Skins-1.8");
                     byte[] data = SkinPackets.makeCustomResponse(skinsBeingFetched.remove(0), 0, res);
-                    in.writeShort(data.length);
-                    in.writeBytes(data);
+                    bb.writeShort(data.length);
+                    bb.writeBytes(data);
+                    out.add(bb);
+                    return;
+                } else if (tag.equals("EAG|Reconnect")) {
+                    msg = new byte[in.readShort()];
+                    in.readBytes(msg);
+                    in.resetReaderIndex();
+                    in.resetWriterIndex();
+                    in.writeByte((byte) 0xFF);
+                    Types1_6_4.STRING.write(in, "Please use the IP: " + ChatColorUtil.COLOR_CHAR + "n" + new String(msg, StandardCharsets.UTF_8));
+                    in.resetReaderIndex();
+                    ctx.fireChannelRead(in.retain()).close();
+                    if (!(proxyConnection instanceof ProxyConnection)) {
+                        ((LegacyProxyConnection) proxyConnection).getC2P().close();
+                    }
+                    return;
                 }
             } catch (Exception ignored) {
             }

@@ -1,7 +1,5 @@
 # Use premium skins
 premium-skins: false
-# Handle Eagler skins and voice on the proxy side
-eagler-utils: true
 # Sync Eagler skins
 eagler-skins: true
 # Enable Eagler voice chat

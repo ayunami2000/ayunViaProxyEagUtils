@@ -20,6 +20,7 @@ import net.raphimc.viaproxy.plugins.events.Proxy2ServerChannelInitializeEvent;
 import net.raphimc.viaproxy.plugins.events.types.ITyped;
 import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
+import net.raphimc.viaproxy.proxy.util.ChannelUtil;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import javax.net.ssl.*;
@@ -97,44 +98,48 @@ public class Main extends ViaProxyPlugin {
 
 
             if (c2p.hasAttr(secureWs)) {
-                ch.attr(MCPipeline.COMPRESSION_THRESHOLD_ATTRIBUTE_KEY).set(-2);
-                if (proxyConnection instanceof ProxyConnection && ((ProxyConnection) proxyConnection).getServerVersion().isNewerThan(VersionEnum.r1_6_4)) {
-                    ch.pipeline().remove(MCPipeline.SIZER_HANDLER_NAME);
-                } else if (ch.pipeline().get(MCPipeline.ENCRYPTION_HANDLER_NAME) != null) {
-                    ch.pipeline().remove(MCPipeline.ENCRYPTION_HANDLER_NAME);
-                }
-                StringBuilder url = new StringBuilder("ws");
-                boolean secure = c2p.attr(secureWs).get();
-                if (secure) {
-                    final SSLEngine sslEngine = sc.createSSLEngine(addr.getAddress(), addr.getPort());
-                    sslEngine.setUseClientMode(true);
-                    sslEngine.setNeedClientAuth(false);
-                    ch.pipeline().addFirst("eag-server-ssl", new SslHandler(sslEngine));
-                    url.append("s");
-                    ch.pipeline().addAfter("eag-server-ssl", "eag-server-http-codec", new HttpClientCodec());
-                } else {
-                    ch.pipeline().addFirst("eag-server-http-codec", new HttpClientCodec());
-                }
-                url.append("://").append(addr.getAddress());
-                boolean addPort = (secure && addr.getPort() != 443) || (!secure && addr.getPort() != 80);
-                if (addPort) {
-                    url.append(":").append(addr.getPort());
-                }
-                String path = c2p.attr(wsPath).get();
-                if (path != null) {
-                    url.append("/").append(path);
-                }
-                URI uri = new URI(url.toString());
-                HttpHeaders headers = new DefaultHttpHeaders();
-                headers.set(HttpHeaderNames.HOST, uri.getHost() + (addPort ? ":" + uri.getPort() : ""));
-                headers.set(HttpHeaderNames.ORIGIN, "via.shhnowisnottheti.me");
-                ch.pipeline().addAfter("eag-server-http-codec", "eag-server-http-aggregator", new HttpObjectAggregator(2097152, true));
-                ch.pipeline().addAfter("eag-server-http-aggregator", "eag-server-ws-compression", WebSocketClientCompressionHandler.INSTANCE);
-                ch.pipeline().addAfter("eag-server-ws-compression", "eag-server-ws-handshaker", new WebSocketClientProtocolHandler(WebSocketClientHandshakerFactory.newHandshaker(uri, WebSocketVersion.V13, null, true, headers, 2097152)));
-                ch.pipeline().addAfter("eag-server-ws-handshaker", "eag-server-ws-ready", new WebSocketConnectedNotifier());
-                ch.pipeline().addAfter("eag-server-ws-ready", "eag-server-handler", new EaglerServerHandler(proxyConnection, c2p.attr(eagxPass).get()));
+                doWsServerStuff(ch, proxyConnection, c2p, addr);
             }
         }
+    }
+
+    private static void doWsServerStuff(Channel ch, NetClient proxyConnection, Channel c2p, ServerAddress addr) throws URISyntaxException {
+        ch.attr(MCPipeline.COMPRESSION_THRESHOLD_ATTRIBUTE_KEY).set(-2);
+        if (proxyConnection instanceof ProxyConnection && ((ProxyConnection) proxyConnection).getServerVersion().isNewerThan(VersionEnum.r1_6_4)) {
+            ch.pipeline().remove(MCPipeline.SIZER_HANDLER_NAME);
+        } else if (ch.pipeline().get(MCPipeline.ENCRYPTION_HANDLER_NAME) != null) {
+            ch.pipeline().remove(MCPipeline.ENCRYPTION_HANDLER_NAME);
+        }
+        StringBuilder url = new StringBuilder("ws");
+        boolean secure = c2p.attr(secureWs).get();
+        if (secure) {
+            final SSLEngine sslEngine = sc.createSSLEngine(addr.getAddress(), addr.getPort());
+            sslEngine.setUseClientMode(true);
+            sslEngine.setNeedClientAuth(false);
+            ch.pipeline().addFirst("eag-server-ssl", new SslHandler(sslEngine));
+            url.append("s");
+            ch.pipeline().addAfter("eag-server-ssl", "eag-server-http-codec", new HttpClientCodec());
+        } else {
+            ch.pipeline().addFirst("eag-server-http-codec", new HttpClientCodec());
+        }
+        url.append("://").append(addr.getAddress());
+        boolean addPort = (secure && addr.getPort() != 443) || (!secure && addr.getPort() != 80);
+        if (addPort) {
+            url.append(":").append(addr.getPort());
+        }
+        String path = c2p.attr(wsPath).get();
+        if (path != null) {
+            url.append("/").append(path);
+        }
+        URI uri = new URI(url.toString());
+        HttpHeaders headers = new DefaultHttpHeaders();
+        headers.set(HttpHeaderNames.HOST, uri.getHost() + (addPort ? ":" + uri.getPort() : ""));
+        headers.set(HttpHeaderNames.ORIGIN, "via.shhnowisnottheti.me");
+        ch.pipeline().addAfter("eag-server-http-codec", "eag-server-http-aggregator", new HttpObjectAggregator(2097152, true));
+        ch.pipeline().addAfter("eag-server-http-aggregator", "eag-server-ws-compression", WebSocketClientCompressionHandler.INSTANCE);
+        ch.pipeline().addAfter("eag-server-ws-compression", "eag-server-ws-handshaker", new WebSocketClientProtocolHandler(WebSocketClientHandshakerFactory.newHandshaker(uri, WebSocketVersion.V13, null, true, headers, 2097152)));
+        ch.pipeline().addAfter("eag-server-ws-handshaker", "eag-server-ws-ready", new WebSocketConnectedNotifier());
+        ch.pipeline().addAfter("eag-server-ws-ready", "eag-server-handler", new EaglerServerHandler(proxyConnection, c2p.attr(eagxPass).get()));
     }
 
     @EventHandler
@@ -143,7 +148,7 @@ public class Main extends ViaProxyPlugin {
         if (event.getType() == ITyped.Type.PRE) {
             event.getChannel().pipeline().addLast("eaglercraft-initial-handler", new EaglercraftInitialHandler());
         }
-        if (event.getType() == ITyped.Type.POST && FunnyConfig.eaglerUtils) {
+        if (event.getType() == ITyped.Type.POST) {
             event.getChannel().pipeline().addAfter("eaglercraft-initial-handler", "ayun-eag-detector", new EaglerConnectionHandler());
         }
     }
@@ -154,7 +159,9 @@ public class Main extends ViaProxyPlugin {
             super.userEventTriggered(ctx, evt);
             if (evt instanceof EaglercraftInitialHandler.EaglercraftClientConnected) {
                 ctx.pipeline().remove("ayun-eag-detector");
-                ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-utils-init", new EaglerUtilsInitHandler());
+                if (!ctx.channel().hasAttr(secureWs)) {
+                    ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-utils-init", new EaglerUtilsInitHandler());
+                }
             }
         }
 
