@@ -90,15 +90,6 @@ public class Main extends ViaProxyPlugin {
                 addr = ((ProxyConnection) proxyConnection).getServerAddress();
             }
 
-
-
-
-            c2p.attr(secureWs).set(true); // todo: THIS!!
-
-
-
-
-
             if (c2p.hasAttr(secureWs)) {
                 doWsServerStuff(ch, proxyConnection, c2p, addr);
                 if (!event.isLegacyPassthrough()) {
