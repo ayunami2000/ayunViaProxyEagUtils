@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.packet.PacketTypes;
+import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
 
 import javax.imageio.ImageIO;
 import java.awt.image.DataBufferByte;
@@ -50,7 +51,7 @@ public class SkinService {
                 for (int i = 0; i < tmp2.length; ++i) {
                     System.arraycopy(Ints.toByteArray(tmp2[i]), 0, res, i * 4, 4);
                 }
-            } else {
+            } else if (res.length == 16384) {
                 for (int j = 0; j < res.length; j += 4) {
                     final byte tmp3 = res[j + 3];
                     res[j + 3] = res[j + 2];
@@ -58,6 +59,9 @@ public class SkinService {
                     res[j + 1] = res[j];
                     res[j] = tmp3;
                 }
+            } else {
+                sendData(sender, SkinPackets.makePresetResponse(searchUUID));
+                return;
             }
             sendData(sender, SkinPackets.makeCustomResponse(searchUUID, 0, res));
         } else {

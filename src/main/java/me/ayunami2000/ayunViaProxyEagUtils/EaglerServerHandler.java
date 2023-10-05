@@ -8,6 +8,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import net.jodah.expiringmap.ExpiringMap;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.netty.connection.NetClient;
 import net.raphimc.netminecraft.packet.PacketTypes;
@@ -19,16 +20,22 @@ import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFrame, ByteBuf> {
     private final VersionEnum version;
     private final String password;
     private final NetClient proxyConnection;
-    private final List<UUID> skinsBeingFetched = new ArrayList<>();
+    private final Map<UUID, String> uuidStringMap = new HashMap<>();
+    private final Map<Integer, UUID> eidUuidMap = new HashMap<>();
+    private final ExpiringMap<Short, UUID> skinsBeingFetched = ExpiringMap.builder().expiration(1, TimeUnit.MINUTES).build();
+    private short skinFetchCounter = 0;
     private ByteBuf serverBoundPartialPacket = Unpooled.EMPTY_BUFFER;
     private ByteBuf clientBoundPartialPacket = Unpooled.EMPTY_BUFFER;
     public EaglerServerHandler(NetClient proxyConnection, String password) {
@@ -47,6 +54,30 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
     @Override
     public void encode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         if (version.isNewerThan(VersionEnum.r1_6_4)) {
+            if (in.readableBytes() == 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
+                // todo: legacy ping
+                ctx.close();
+                return;
+            }
+
+            int len = PacketTypes.readVarInt(in);
+            ByteBuf bb = ctx.alloc().buffer(len);
+            bb.writeBytes(in);
+            int id = PacketTypes.readVarInt(bb);
+            if (id == 0x00) {
+                PacketTypes.readVarInt(bb);
+                PacketTypes.readString(bb, 32767);
+                bb.readUnsignedShort();
+                int nextState = PacketTypes.readVarInt(bb);
+                if (nextState == 1) {
+                    // todo: ping
+                    ctx.close();
+                    return;
+                }
+            }
+            bb.release();
+            in.resetReaderIndex();
+
             if (handshakeState == 0) {
                 handshakeState = 1;
                 if (((ProxyConnection) proxyConnection).getGameProfile() == null) {
@@ -80,6 +111,10 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
                     bb.readerIndex(readerIndex);
                     bb.readBytes(packet, len);
                     encodeOld(ctx, packet, out);
+                    if (!ctx.channel().isOpen()) {
+                        out.add(Unpooled.EMPTY_BUFFER);
+                        return;
+                    }
                 }
             } catch (Exception e) {
                 bb.readerIndex(readerIndex);
@@ -98,18 +133,61 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
     }
 
     public void encodeOld(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+        if (in.readableBytes() == 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
+            // todo: legacy ping
+            ctx.close();
+            return;
+        }
         if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 2) {
             in.setByte(1, in.getUnsignedByte(1) + 8);
         }
-        if (in.readableBytes() >= 1 && in.getUnsignedByte(0) == 0xFD) {
+        if (in.getUnsignedByte(0) == 0xFD) {
             return;
         }
         if (in.readableBytes() >= 3 && in.getUnsignedByte(0) == 250) {
             in.skipBytes(1);
             String tag;
+            byte[] msg;
             try {
                 tag = Types1_6_4.STRING.read(in);
                 if (tag.equals("EAG|Skins-1.8")) {
+                    msg = new byte[in.readShort()];
+                    in.readBytes(msg);
+                    if (msg.length == 0) {
+                        throw new IOException("Zero-length packet recieved");
+                    }
+                    final int packetId = msg[0] & 0xFF;
+                    switch (packetId) {
+                        case 3: {
+                            if (msg.length != 17) {
+                                throw new IOException("Invalid length " + msg.length + " for skin request packet");
+                            }
+                            final UUID searchUUID = SkinPackets.bytesToUUID(msg, 1);
+                            if (uuidStringMap.containsKey(searchUUID)) {
+                                short id = skinFetchCounter++;
+                                skinsBeingFetched.put(id, searchUUID);
+                                String name = uuidStringMap.get(searchUUID);
+                                ByteBuf bb = ctx.alloc().buffer();
+                                bb.writeByte((byte) 250);
+                                Types1_6_4.STRING.write(bb, "EAG|FetchSkin");
+                                ByteBuf bbb = ctx.alloc().buffer();
+                                bbb.writeByte((byte) ((id >> 8) & 0xFF));
+                                bbb.writeByte((byte) (id & 0xFF));
+                                bbb.writeBytes(name.getBytes(StandardCharsets.UTF_8));
+                                bb.writeShort(bbb.readableBytes());
+                                bb.writeBytes(bbb);
+                                bbb.release();
+                                out.add(new BinaryWebSocketFrame(bb));
+                            }
+                            break;
+                        }
+                        case 6: {
+                            break;
+                        }
+                        default: {
+                            throw new IOException("Unknown packet type " + packetId);
+                        }
+                    }
                     return;
                 }
             } catch (Exception ignored) {
@@ -190,25 +268,34 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
     }
     public void decodeOld(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         if (in.getUnsignedByte(0) == 0x14) {
-            in.skipBytes(5);
             try {
+                in.skipBytes(1);
+                int eid = in.readInt();
                 String name = Types1_6_4.STRING.read(in);
                 UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
-                skinsBeingFetched.add(uuid);
-                ByteBuf bb = ctx.alloc().buffer();
-                bb.writeByte((byte) 250);
-                Types1_6_4.STRING.write(bb, "EAG|FetchSkin");
-                ByteBuf bbb = ctx.alloc().buffer();
-                bbb.writeByte((byte) 0);
-                bbb.writeByte((byte) 0);
-                bbb.writeBytes(name.getBytes(StandardCharsets.UTF_8));
-                bb.writeShort(bbb.readableBytes());
-                bb.writeBytes(bbb);
-                bbb.release();
-                ctx.writeAndFlush(new BinaryWebSocketFrame(bb));
+                eidUuidMap.put(eid, uuid);
+                uuidStringMap.put(uuid, name);
             } catch (Exception ignored) {
             }
             in.resetReaderIndex();
+        }
+        if (in.getUnsignedByte(0) == 0x1D) {
+            try {
+                in.skipBytes(1);
+                short count = in.readUnsignedByte();
+                for (short i = 0; i < count; i++) {
+                    int eid = in.readInt();
+                    if (eidUuidMap.containsKey(eid)) {
+                        uuidStringMap.remove(eidUuidMap.remove(eid));
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            in.resetReaderIndex();
+        }
+        if (in.getUnsignedByte(0) == 0x09) {
+            eidUuidMap.clear();
+            uuidStringMap.clear();
         }
         if (in.getUnsignedByte(0) == 0xFD) {
             in.writerIndex(0);
@@ -224,19 +311,15 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
             try {
                 tag = Types1_6_4.STRING.read(in);
                 if (tag.equals("EAG|UserSkin")) {
-                    if (skinsBeingFetched.isEmpty()) {
-                        return;
-                    }
                     msg = new byte[in.readShort()];
                     in.readBytes(msg);
-                    if (msg.length < 8192) {
+                    short id = (short) ((msg[0] << 8) + msg[1]);
+                    if (!skinsBeingFetched.containsKey(id)) {
                         return;
                     }
-                    // TODO: FIX LOL!!
-                    // also todo: handle status packets
-                    byte[] res = new byte[msg.length > 16384 ? 16384 : 8192];
-                    System.arraycopy(msg, 1, res, 0, res.length);
-                    if (res.length < 16384) {
+                    byte[] res = new byte[msg.length - 3];
+                    System.arraycopy(msg, 3, res, 0, res.length);
+                    if (res.length == 8192) {
                         final int[] tmp1 = new int[2048];
                         final int[] tmp2 = new int[4096];
                         for (int i = 0; i < tmp1.length; ++i) {
@@ -247,7 +330,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
                         for (int i = 0; i < tmp2.length; ++i) {
                             System.arraycopy(Ints.toByteArray(tmp2[i]), 0, res, i * 4, 4);
                         }
-                    } else {
+                    } else if (res.length == 16384) {
                         for (int j = 0; j < res.length; j += 4) {
                             final byte tmp3 = res[j + 3];
                             res[j + 3] = res[j + 2];
@@ -255,11 +338,21 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
                             res[j + 1] = res[j];
                             res[j] = tmp3;
                         }
+                    } else {
+                        ByteBuf bb = ctx.alloc().buffer();
+                        bb.writeByte((byte) 250);
+                        Types1_6_4.STRING.write(bb, "EAG|Skins-1.8");
+                        byte[] data = SkinPackets.makePresetResponse(skinsBeingFetched.remove(id));
+                        bb.writeShort(data.length);
+                        bb.writeBytes(data);
+                        out.add(bb);
+                        return;
                     }
+                    UUID uuid = skinsBeingFetched.remove(id);
                     ByteBuf bb = ctx.alloc().buffer();
                     bb.writeByte((byte) 250);
                     Types1_6_4.STRING.write(bb, "EAG|Skins-1.8");
-                    byte[] data = SkinPackets.makeCustomResponse(skinsBeingFetched.remove(0), 0, res);
+                    byte[] data = SkinPackets.makeCustomResponse(uuid, 0, res);
                     bb.writeShort(data.length);
                     bb.writeBytes(data);
                     out.add(bb);

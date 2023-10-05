@@ -1,9 +1,7 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
@@ -25,6 +23,7 @@ import net.raphimc.viaproxy.plugins.events.Proxy2ServerChannelInitializeEvent;
 import net.raphimc.viaproxy.plugins.events.types.ITyped;
 import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
+import net.raphimc.viaproxy.proxy.util.ChannelUtil;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import javax.net.ssl.*;
@@ -94,8 +93,7 @@ public class Main extends ViaProxyPlugin {
 
 
 
-
-            // c2p.attr(secureWs).set(true);
+            c2p.attr(secureWs).set(true); // todo: THIS!!
 
 
 
@@ -103,6 +101,29 @@ public class Main extends ViaProxyPlugin {
 
             if (c2p.hasAttr(secureWs)) {
                 doWsServerStuff(ch, proxyConnection, c2p, addr);
+                if (!event.isLegacyPassthrough()) {
+                    ch.pipeline().addFirst("handshake-waiter", new ChannelOutboundHandlerAdapter() {
+                        private boolean hasHandshake = false;
+
+                        @Override
+                        public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+                            if (msg instanceof ByteBuf) {
+                                hasHandshake = true;
+                                ChannelUtil.restoreAutoRead(c2p);
+                            }
+                            super.write(ctx, msg, promise);
+                        }
+
+                        @Override
+                        public void flush(ChannelHandlerContext ctx) throws Exception {
+                            super.flush(ctx);
+                            if (hasHandshake) {
+                                ch.pipeline().remove(this);
+                                ChannelUtil.disableAutoRead(c2p);
+                            }
+                        }
+                    });
+                }
             }
         }
     }
@@ -114,13 +135,33 @@ public class Main extends ViaProxyPlugin {
         } else if (ch.pipeline().get(MCPipeline.ENCRYPTION_HANDLER_NAME) != null) {
             ch.pipeline().remove(MCPipeline.ENCRYPTION_HANDLER_NAME);
         }
+        if (c2p.pipeline().get("ayun-eag-voice") != null) {
+            c2p.pipeline().remove("ayun-eag-voice");
+        }
+        if (c2p.pipeline().get("ayun-eag-skin") != null) {
+            c2p.pipeline().remove("ayun-eag-skin");
+        }
+        if (c2p.pipeline().get("ayun-eag-x-login") != null) {
+            c2p.pipeline().remove("ayun-eag-x-login");
+        }
+        if (c2p.pipeline().get("ayun-eag-skin-x") != null) {
+            c2p.pipeline().remove("ayun-eag-skin-x");
+        }
         StringBuilder url = new StringBuilder("ws");
         boolean secure = c2p.attr(secureWs).get();
         if (secure) {
             final SSLEngine sslEngine = sc.createSSLEngine(addr.getAddress(), addr.getPort());
             sslEngine.setUseClientMode(true);
             sslEngine.setNeedClientAuth(false);
-            ch.pipeline().addFirst("eag-server-ssl", new SslHandler(sslEngine));
+            ch.pipeline().addFirst("eag-server-ssl", new SslHandler(sslEngine) {
+                @Override
+                public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+                    if (this.handshakeFuture().cause() != null) {
+                        ExceptionUtil.handleNettyException(ctx, this.handshakeFuture().cause(), null);
+                    }
+                    super.closeOutbound();
+                }
+            });
             url.append("s");
             ch.pipeline().addAfter("eag-server-ssl", "eag-server-http-codec", new HttpClientCodec());
         } else {
@@ -163,9 +204,7 @@ public class Main extends ViaProxyPlugin {
             super.userEventTriggered(ctx, evt);
             if (evt instanceof EaglercraftInitialHandler.EaglercraftClientConnected) {
                 ctx.pipeline().remove("ayun-eag-detector");
-                if (!ctx.channel().hasAttr(secureWs)) {
-                    ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-utils-init", new EaglerUtilsInitHandler());
-                }
+                ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-utils-init", new EaglerUtilsInitHandler());
             }
         }
 
