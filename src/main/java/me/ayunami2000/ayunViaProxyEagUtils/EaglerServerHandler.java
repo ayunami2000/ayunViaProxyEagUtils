@@ -19,6 +19,7 @@ import net.jodah.expiringmap.ExpiringMap;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.netty.connection.NetClient;
 import net.raphimc.netminecraft.packet.PacketTypes;
+import net.raphimc.vialegacy.api.LegacyProtocolVersion;
 import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ClientboundPackets1_5_2;
 import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ServerboundPackets1_5_2;
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
@@ -69,7 +70,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             return;
         }
         if (version.isNewerThan(VersionEnum.r1_6_4)) {
-            if (in.readableBytes() == 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
+            if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
                 handshakeState = -1;
                 out.add(new TextWebSocketFrame("Accept: MOTD"));
                 return;
@@ -145,7 +146,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
     }
 
     public void encodeOld(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
-        if (in.readableBytes() == 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
+        if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
             handshakeState = -1;
             out.add(new TextWebSocketFrame("Accept: MOTD"));
             return;
@@ -249,8 +250,8 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             if (handshakeState == -1) {
                 ByteBuf bb = ctx.alloc().buffer();
                 bb.writeByte((byte) 0xFF);
-                StringBuilder sb = new StringBuilder("§1\0");
-                sb.append(version.getVersion()).append("\0");
+                StringBuilder sb = new StringBuilder("\u00A71\0");
+                sb.append(LegacyProtocolVersion.getRealProtocolVersion(version.getVersion())).append("\0");
                 sb.append(version.getName()).append("\0");
                 sb.append(motdSb).append("\0");
                 sb.append(online).append("\0");
@@ -275,7 +276,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
                 JsonObject resp = new JsonObject();
                 JsonObject versionObj = new JsonObject();
                 versionObj.addProperty("name", version.getName());
-                versionObj.addProperty("protocol", version.getVersion());
+                versionObj.addProperty("protocol", LegacyProtocolVersion.getRealProtocolVersion(version.getVersion()));
                 resp.add("version", versionObj);
                 JsonObject playersObj = new JsonObject();
                 playersObj.addProperty("max", max);
@@ -326,7 +327,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             JsonObject resp = new JsonObject();
             JsonObject versionObj = new JsonObject();
             versionObj.addProperty("name", version.getName());
-            versionObj.addProperty("protocol", version.getVersion());
+            versionObj.addProperty("protocol", LegacyProtocolVersion.getRealProtocolVersion(version.getVersion()));
             resp.add("version", versionObj);
             JsonObject playersObj = new JsonObject();
             playersObj.addProperty("max", serverInfo.max);
