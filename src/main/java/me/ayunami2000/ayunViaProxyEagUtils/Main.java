@@ -174,9 +174,8 @@ public class Main extends ViaProxyPlugin {
             url.append("/").append(path);
         }
         URI uri = new URI(url.toString());
-        HttpHeaders headers = new DefaultHttpHeaders();
+        HttpHeaders headers = c2p.hasAttr(EaglercraftHandler.httpHeadersKey) ? c2p.attr(EaglercraftHandler.httpHeadersKey).get() : new DefaultHttpHeaders().set(HttpHeaderNames.ORIGIN, "via.shhnowisnottheti.me");
         headers.set(HttpHeaderNames.HOST, uri.getHost() + (addPort ? ":" + uri.getPort() : ""));
-        headers.set(HttpHeaderNames.ORIGIN, "via.shhnowisnottheti.me");
         ch.pipeline().addAfter("eag-server-http-codec", "eag-server-http-aggregator", new HttpObjectAggregator(2097152, true));
         ch.pipeline().addAfter("eag-server-http-aggregator", "eag-server-ws-compression", WebSocketClientCompressionHandler.INSTANCE);
         ch.pipeline().addAfter("eag-server-ws-compression", "eag-server-ws-handshaker", new WebSocketClientProtocolHandler(WebSocketClientHandshakerFactory.newHandshaker(uri, WebSocketVersion.V13, null, true, headers, 2097152)));

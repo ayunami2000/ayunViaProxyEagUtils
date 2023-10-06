@@ -11,6 +11,7 @@ import com.viaversion.viaversion.protocols.base.ServerboundStatusPackets;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
@@ -49,6 +50,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
         }
     }
     public static final AttributeKey<ProfileData> profileDataKey = AttributeKey.newInstance("eagx-profile-data");
+    public static final AttributeKey<HttpHeaders> httpHeadersKey = AttributeKey.newInstance("eag-http-headers");
     private HostAndPort host;
     public State state;
     public VersionEnum version;
@@ -332,6 +334,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                 return;
             }
             this.host = HostAndPort.fromString(handshake.requestHeaders().get("Host").replaceAll("__", ".")).withDefaultPort(80);
+            ctx.channel().attr(httpHeadersKey).set(handshake.requestHeaders());
         }
         super.userEventTriggered(ctx, evt);
     }
