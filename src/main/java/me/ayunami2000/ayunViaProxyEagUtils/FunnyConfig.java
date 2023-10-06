@@ -12,6 +12,7 @@ public class FunnyConfig extends Config {
     public static boolean premiumSkins = false;
     public static boolean eaglerSkins = true;
     public static boolean eaglerVoice = true;
+    public static int eaglerServerMode = 0;
 
     protected FunnyConfig(File configFile) {
         super(configFile);
@@ -35,6 +36,10 @@ public class FunnyConfig extends Config {
         item = map.get("eagler-voice");
         if (item instanceof Boolean) {
             eaglerVoice = (Boolean) item;
+        }
+        item = map.get("eagler-server-mode");
+        if (item instanceof Integer) {
+            eaglerServerMode = (Integer) item;
         }
     }
 

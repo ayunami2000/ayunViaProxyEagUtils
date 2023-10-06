@@ -90,6 +90,12 @@ public class Main extends ViaProxyPlugin {
                 addr = ((ProxyConnection) proxyConnection).getServerAddress();
             }
 
+            if (FunnyConfig.eaglerServerMode == 1) {
+                c2p.attr(secureWs).set(false);
+            } else if (FunnyConfig.eaglerServerMode == 2) {
+                c2p.attr(secureWs).set(true);
+            }
+
             if (c2p.hasAttr(secureWs)) {
                 doWsServerStuff(ch, proxyConnection, c2p, addr);
                 if (!event.isLegacyPassthrough()) {

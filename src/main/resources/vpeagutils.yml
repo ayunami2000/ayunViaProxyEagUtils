@@ -4,3 +4,8 @@ premium-skins: false
 eagler-skins: true
 # Enable Eagler voice chat
 eagler-voice: true
+# Eaglercraft server mode
+# 0 - Default (non-Eaglercraft)
+# 1 - Force non-secure (ws)
+# 2 - Force secure (wss)
+eagler-server-mode: 0
