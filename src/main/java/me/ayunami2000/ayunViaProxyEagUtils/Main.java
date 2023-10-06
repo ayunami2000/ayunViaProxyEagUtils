@@ -1,4 +1,7 @@
-package me.ayunami2000.ayunViaProxyEagUtils;
+package me.ayunami2000.ayunViaProxyEagUtils.*;
+package eaglerdevs.eagler.ayunViaProxyEagUtils.*;
+
+import io.eaglerdevs.eagler.ayunViaProxyEagUtils.*;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
