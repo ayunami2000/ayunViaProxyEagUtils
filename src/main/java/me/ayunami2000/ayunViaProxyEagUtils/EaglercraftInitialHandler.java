@@ -50,42 +50,44 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-handler", new WebSocketServerProtocolHandler("/", null, true));
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-active-notifier", new WebSocketActiveNotifier());
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "eaglercraft-handler", new EaglercraftHandler());
-                ctx.pipeline().replace(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, new LegacyPassthroughInitialHandler() {
-                    @Override
-                    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
-                        if (ctx.channel().isOpen()) {
-                            if (msg.isReadable()) {
-                                int lengthOrPacketId = msg.getUnsignedByte(0);
-                                if (lengthOrPacketId == 0 || lengthOrPacketId == 1 || lengthOrPacketId == 2 || lengthOrPacketId == 254) {
-                                    boolean fard = false;
-                                    for (Map.Entry<String, ChannelHandler> entry : ctx.pipeline()) {
-                                        if (entry.getKey().equals(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME)) {
-                                            fard = true;
-                                        } else {
-                                            if (fard) {
-                                                ctx.pipeline().remove(entry.getValue());
+                if (ctx.pipeline().get(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME) != null) {
+                    ctx.pipeline().replace(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME, new LegacyPassthroughInitialHandler() {
+                        @Override
+                        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
+                            if (ctx.channel().isOpen()) {
+                                if (msg.isReadable()) {
+                                    int lengthOrPacketId = msg.getUnsignedByte(0);
+                                    if (lengthOrPacketId == 0 || lengthOrPacketId == 1 || lengthOrPacketId == 2 || lengthOrPacketId == 254) {
+                                        boolean fard = false;
+                                        for (Map.Entry<String, ChannelHandler> entry : ctx.pipeline()) {
+                                            if (entry.getKey().equals(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME)) {
+                                                fard = true;
+                                            } else {
+                                                if (fard) {
+                                                    ctx.pipeline().remove(entry.getValue());
+                                                }
                                             }
                                         }
-                                    }
 
-                                    Supplier<ChannelHandler> handlerSupplier = () -> PluginManager.EVENT_MANAGER.call(new Client2ProxyHandlerCreationEvent(new PassthroughClient2ProxyHandler(), true)).getHandler();
-                                    PassthroughClient2ProxyChannelInitializer channelInitializer = new PassthroughClient2ProxyChannelInitializer(handlerSupplier);
-                                    try {
-                                        initChannelMethod.invoke(channelInitializer, ctx.channel());
-                                    } catch (IllegalAccessException | InvocationTargetException e) {
-                                        throw new RuntimeException(e);
+                                        Supplier<ChannelHandler> handlerSupplier = () -> PluginManager.EVENT_MANAGER.call(new Client2ProxyHandlerCreationEvent(new PassthroughClient2ProxyHandler(), true)).getHandler();
+                                        PassthroughClient2ProxyChannelInitializer channelInitializer = new PassthroughClient2ProxyChannelInitializer(handlerSupplier);
+                                        try {
+                                            initChannelMethod.invoke(channelInitializer, ctx.channel());
+                                        } catch (IllegalAccessException | InvocationTargetException e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                        ctx.fireChannelActive();
+                                        ctx.fireChannelRead(msg.retain());
+                                        ctx.pipeline().remove(this);
+                                    } else {
+                                        ctx.pipeline().remove(this);
+                                        ctx.pipeline().fireChannelRead(msg.retain());
                                     }
-                                    ctx.fireChannelActive();
-                                    ctx.fireChannelRead(msg.retain());
-                                    ctx.pipeline().remove(this);
-                                } else {
-                                    ctx.pipeline().remove(this);
-                                    ctx.pipeline().fireChannelRead(msg.retain());
                                 }
                             }
                         }
-                    }
-                });
+                    });
+                }
                 ctx.fireUserEventTriggered(EaglercraftClientConnected.INSTANCE);
                 ctx.pipeline().fireChannelRead(in.readBytes(in.readableBytes()));
             } else {
