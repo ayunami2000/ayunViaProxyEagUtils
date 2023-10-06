@@ -39,6 +39,22 @@ public class SkinService {
             final byte[] src = EaglerSkinHandler.skinCollection.get(searchUUID);
             byte[] res = new byte[src.length - 1];
             System.arraycopy(src, 1, res, 0, res.length);
+            if (res.length <= 16) {
+                int presetId = res[0] & 0xFF;
+                InputStream stream = Main.class.getResourceAsStream("/n" + presetId + ".png");
+                if (stream != null) {
+                    try {
+                        res = ((DataBufferByte) ImageIO.read(stream).getRaster().getDataBuffer()).getData();
+                        for (int i = 0; i < res.length; i += 4) {
+                            final byte tmp = res[i];
+                            res[i] = res[i + 1];
+                            res[i + 1] = res[i + 2];
+                            res[i + 2] = res[i + 3];
+                            res[i + 3] = tmp;
+                        }
+                    } catch (IOException ignored) {}
+                }
+            }
             if (res.length == 8192) {
                 final int[] tmp1 = new int[2048];
                 final int[] tmp2 = new int[4096];
@@ -122,10 +138,12 @@ public class SkinService {
         final byte type = packet[0];
         byte[] res;
         switch (type) {
+            case 1:
             case 4: {
                 res = new byte[16385];
                 res[0] = 1;
-                final int presetId = packet[17] << 24 | packet[18] << 16 | packet[19] << 8 | packet[20];
+                final int o = type == 1 ? 16 : 0;
+                final int presetId = packet[17 - o] << 24 | packet[18 - o] << 16 | packet[19 - o] << 8 | packet[20 - o];
                 final InputStream stream = Main.class.getResourceAsStream("/" + presetId + ".png");
                 if (stream == null) {
                     throw new IOException("Invalid skin preset: " + presetId);
@@ -140,10 +158,12 @@ public class SkinService {
                 }
                 break;
             }
+            case 2:
             case 5: {
                 res = new byte[16385];
                 res[0] = 1;
-                System.arraycopy(packet, 18, res, 1, 16384);
+                final int o = type == 2 ? 16 : 0;
+                System.arraycopy(packet, 18 - o, res, 1, 16384);
                 for (int i = 1; i < 16385; i += 4) {
                     final byte tmp = res[i];
                     res[i] = res[i + 1];

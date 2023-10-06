@@ -9,6 +9,7 @@ import com.viaversion.viaversion.util.ChatColorUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
@@ -35,6 +36,7 @@ import java.awt.image.DataBufferByte;
 import java.awt.image.Raster;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.*;
@@ -153,59 +155,88 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
         }
         if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 2) {
             in.setByte(1, in.getUnsignedByte(1) + 8);
+            out.add(new BinaryWebSocketFrame(in.retain()));
+
+            Channel c2p;
+            if (proxyConnection instanceof ProxyConnection) {
+                c2p = ((ProxyConnection) proxyConnection).getC2P();
+            } else {
+                c2p = ((LegacyProxyConnection) proxyConnection).getC2P();
+            }
+            if (c2p.hasAttr(EaglercraftHandler.profileDataKey)) {
+                EaglercraftHandler.ProfileData profileData = c2p.attr(EaglercraftHandler.profileDataKey).get();
+                if (profileData.type.equals("skin_v1")) {
+                    int packetType = profileData.data[0] & 0xFF;
+                    if (packetType == 1 || packetType == 2) {
+                        try {
+                            byte[] res = SkinService.newToOldSkin(profileData.data);
+                            ByteBuf bb = ctx.alloc().buffer();
+                            bb.writeByte((byte) 250);
+                            Types1_6_4.STRING.write(bb, "EAG|MySkin");
+                            bb.writeShort(res.length);
+                            bb.writeBytes(res);
+                            out.add(new BinaryWebSocketFrame(bb));
+                        } catch (Exception ignored) {}
+                    }
+
+                }
+            }
+            return;
         }
         if (in.getUnsignedByte(0) == 0xFD) {
             return;
         }
-        if (in.readableBytes() >= 3 && in.getUnsignedByte(0) == 250) {
-            in.skipBytes(1);
-            String tag;
-            byte[] msg;
-            try {
-                tag = Types1_6_4.STRING.read(in);
-                if (tag.equals("EAG|Skins-1.8")) {
-                    msg = new byte[in.readShort()];
-                    in.readBytes(msg);
-                    if (msg.length == 0) {
-                        throw new IOException("Zero-length packet recieved");
-                    }
-                    final int packetId = msg[0] & 0xFF;
-                    switch (packetId) {
-                        case 3: {
-                            if (msg.length != 17) {
-                                throw new IOException("Invalid length " + msg.length + " for skin request packet");
+        if (proxyConnection instanceof ProxyConnection) {
+            if (in.readableBytes() >= 3 && in.getUnsignedByte(0) == 250) {
+                in.skipBytes(1);
+                String tag;
+                byte[] msg;
+                try {
+                    tag = Types1_6_4.STRING.read(in);
+                    if (tag.equals("EAG|Skins-1.8")) {
+                        msg = new byte[in.readShort()];
+                        in.readBytes(msg);
+                        if (msg.length == 0) {
+                            throw new IOException("Zero-length packet recieved");
+                        }
+                        final int packetId = msg[0] & 0xFF;
+                        switch (packetId) {
+                            case 3: {
+                                if (msg.length != 17) {
+                                    throw new IOException("Invalid length " + msg.length + " for skin request packet");
+                                }
+                                final UUID searchUUID = SkinPackets.bytesToUUID(msg, 1);
+                                if (uuidStringMap.containsKey(searchUUID)) {
+                                    short id = skinFetchCounter++;
+                                    skinsBeingFetched.put(id, searchUUID);
+                                    String name = uuidStringMap.get(searchUUID);
+                                    ByteBuf bb = ctx.alloc().buffer();
+                                    bb.writeByte((byte) 250);
+                                    Types1_6_4.STRING.write(bb, "EAG|FetchSkin");
+                                    ByteBuf bbb = ctx.alloc().buffer();
+                                    bbb.writeByte((byte) ((id >> 8) & 0xFF));
+                                    bbb.writeByte((byte) (id & 0xFF));
+                                    bbb.writeBytes(name.getBytes(StandardCharsets.UTF_8));
+                                    bb.writeShort(bbb.readableBytes());
+                                    bb.writeBytes(bbb);
+                                    bbb.release();
+                                    out.add(new BinaryWebSocketFrame(bb));
+                                }
+                                break;
                             }
-                            final UUID searchUUID = SkinPackets.bytesToUUID(msg, 1);
-                            if (uuidStringMap.containsKey(searchUUID)) {
-                                short id = skinFetchCounter++;
-                                skinsBeingFetched.put(id, searchUUID);
-                                String name = uuidStringMap.get(searchUUID);
-                                ByteBuf bb = ctx.alloc().buffer();
-                                bb.writeByte((byte) 250);
-                                Types1_6_4.STRING.write(bb, "EAG|FetchSkin");
-                                ByteBuf bbb = ctx.alloc().buffer();
-                                bbb.writeByte((byte) ((id >> 8) & 0xFF));
-                                bbb.writeByte((byte) (id & 0xFF));
-                                bbb.writeBytes(name.getBytes(StandardCharsets.UTF_8));
-                                bb.writeShort(bbb.readableBytes());
-                                bb.writeBytes(bbb);
-                                bbb.release();
-                                out.add(new BinaryWebSocketFrame(bb));
+                            case 6: {
+                                break;
                             }
-                            break;
+                            default: {
+                                throw new IOException("Unknown packet type " + packetId);
+                            }
                         }
-                        case 6: {
-                            break;
-                        }
-                        default: {
-                            throw new IOException("Unknown packet type " + packetId);
-                        }
+                        return;
                     }
-                    return;
+                } catch (Exception ignored) {
                 }
-            } catch (Exception ignored) {
+                in.resetReaderIndex();
             }
-            in.resetReaderIndex();
         }
         out.add(new BinaryWebSocketFrame(in.retain()));
     }
@@ -438,35 +469,37 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
         }
     }
     public void decodeOld(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
-        if (in.getUnsignedByte(0) == 0x14) {
-            try {
-                in.skipBytes(1);
-                int eid = in.readInt();
-                String name = Types1_6_4.STRING.read(in);
-                UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
-                eidUuidMap.put(eid, uuid);
-                uuidStringMap.put(uuid, name);
-            } catch (Exception ignored) {
-            }
-            in.resetReaderIndex();
-        }
-        if (in.getUnsignedByte(0) == 0x1D) {
-            try {
-                in.skipBytes(1);
-                short count = in.readUnsignedByte();
-                for (short i = 0; i < count; i++) {
+        if (proxyConnection instanceof ProxyConnection) {
+            if (in.getUnsignedByte(0) == 0x14) {
+                try {
+                    in.skipBytes(1);
                     int eid = in.readInt();
-                    if (eidUuidMap.containsKey(eid)) {
-                        uuidStringMap.remove(eidUuidMap.remove(eid));
-                    }
+                    String name = Types1_6_4.STRING.read(in);
+                    UUID uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
+                    eidUuidMap.put(eid, uuid);
+                    uuidStringMap.put(uuid, name);
+                } catch (Exception ignored) {
                 }
-            } catch (Exception ignored) {
+                in.resetReaderIndex();
             }
-            in.resetReaderIndex();
-        }
-        if (in.getUnsignedByte(0) == 0x09) {
-            eidUuidMap.clear();
-            uuidStringMap.clear();
+            if (in.getUnsignedByte(0) == 0x1D) {
+                try {
+                    in.skipBytes(1);
+                    short count = in.readUnsignedByte();
+                    for (short i = 0; i < count; i++) {
+                        int eid = in.readInt();
+                        if (eidUuidMap.containsKey(eid)) {
+                            uuidStringMap.remove(eidUuidMap.remove(eid));
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                in.resetReaderIndex();
+            }
+            if (in.getUnsignedByte(0) == 0x09) {
+                eidUuidMap.clear();
+                uuidStringMap.clear();
+            }
         }
         if (in.getUnsignedByte(0) == 0xFD) {
             in.writerIndex(0);
@@ -481,16 +514,32 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             byte[] msg;
             try {
                 tag = Types1_6_4.STRING.read(in);
-                if (tag.equals("EAG|UserSkin")) {
+                if (proxyConnection instanceof ProxyConnection && tag.equals("EAG|UserSkin")) {
                     msg = new byte[in.readShort()];
                     in.readBytes(msg);
                     short id = (short) ((msg[0] << 8) + msg[1]);
                     if (!skinsBeingFetched.containsKey(id)) {
                         return;
                     }
-                    byte[] res = new byte[msg.length - 3];
+                    byte[] res = new byte[Math.min(16384, msg.length - 3)];
                     System.arraycopy(msg, 3, res, 0, res.length);
-                    if (res.length == 8192) {
+                    if (res.length <= 16) {
+                        int presetId = res[0] & 0xFF;
+                        InputStream stream = Main.class.getResourceAsStream("/n" + presetId + ".png");
+                        if (stream != null) {
+                            try {
+                                res = ((DataBufferByte) ImageIO.read(stream).getRaster().getDataBuffer()).getData();
+                                for (int i = 0; i < res.length; i += 4) {
+                                    final byte tmp = res[i];
+                                    res[i] = res[i + 1];
+                                    res[i + 1] = res[i + 2];
+                                    res[i + 2] = res[i + 3];
+                                    res[i + 3] = tmp;
+                                }
+                            } catch (IOException ignored) {}
+                        }
+                    }
+                    if (res.length >= 8192 && res.length < 16384) {
                         final int[] tmp1 = new int[2048];
                         final int[] tmp2 = new int[4096];
                         for (int i = 0; i < tmp1.length; ++i) {
