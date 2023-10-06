@@ -97,7 +97,8 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                 }
             }
             data.add("motd", motd);
-            data.addProperty("icon", root.has("favicon"));
+            boolean hasIcon = root.has("favicon") || ctx.channel().hasAttr(EaglerServerHandler.eagIconKey);
+            data.addProperty("icon", hasIcon);
             if (root.has("players")) {
                 final JsonObject javaPlayers = root.getAsJsonObject("players");
                 data.add("online", javaPlayers.get("online"));
@@ -121,6 +122,8 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                     iconPixels[i * 4 + 3] = (byte) (pixels[i] >> 24 & 0xFF);
                 }
                 out.add(new BinaryWebSocketFrame(ctx.alloc().buffer().writeBytes(iconPixels)));
+            } else if (hasIcon) {
+                out.add(new BinaryWebSocketFrame(ctx.channel().attr(EaglerServerHandler.eagIconKey).get()));
             }
         } else {
             if (this.state != State.LOGIN_COMPLETE) {

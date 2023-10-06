@@ -1,6 +1,10 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
 import com.google.common.primitives.Ints;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.viaversion.viaversion.util.ChatColorUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -8,6 +12,9 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import io.netty.handler.codec.http.websocketx.WebSocketFrame;
+import io.netty.util.AttributeKey;
 import net.jodah.expiringmap.ExpiringMap;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.netty.connection.NetClient;
@@ -20,15 +27,19 @@ import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
+import java.awt.image.Raster;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFrame, ByteBuf> {
+public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, ByteBuf> {
     private final VersionEnum version;
     private final String password;
     private final NetClient proxyConnection;
@@ -53,33 +64,34 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
 
     @Override
     public void encode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+        if (handshakeState < 0) {
+            out.add(Unpooled.EMPTY_BUFFER);
+            return;
+        }
         if (version.isNewerThan(VersionEnum.r1_6_4)) {
             if (in.readableBytes() == 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
-                // todo: legacy ping
-                ctx.close();
+                handshakeState = -1;
+                out.add(new TextWebSocketFrame("Accept: MOTD"));
                 return;
             }
 
-            int len = PacketTypes.readVarInt(in);
-            ByteBuf bb = ctx.alloc().buffer(len);
-            bb.writeBytes(in);
-            int id = PacketTypes.readVarInt(bb);
-            if (id == 0x00) {
-                PacketTypes.readVarInt(bb);
-                PacketTypes.readString(bb, 32767);
-                bb.readUnsignedShort();
-                int nextState = PacketTypes.readVarInt(bb);
-                if (nextState == 1) {
-                    // todo: ping
-                    ctx.close();
-                    return;
-                }
-            }
-            bb.release();
-            in.resetReaderIndex();
-
             if (handshakeState == 0) {
                 handshakeState = 1;
+
+                int id = PacketTypes.readVarInt(in);
+                if (id == 0x00) {
+                    PacketTypes.readVarInt(in);
+                    PacketTypes.readString(in, 32767);
+                    in.readUnsignedShort();
+                    int nextState = PacketTypes.readVarInt(in);
+                    if (nextState == 1) {
+                        handshakeState = -2;
+                        out.add(new TextWebSocketFrame("Accept: MOTD"));
+                        return;
+                    }
+                }
+                in.resetReaderIndex();
+
                 if (((ProxyConnection) proxyConnection).getGameProfile() == null) {
                     out.add(Unpooled.EMPTY_BUFFER);
                     ctx.close();
@@ -134,8 +146,8 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
 
     public void encodeOld(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         if (in.readableBytes() == 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
-            // todo: legacy ping
-            ctx.close();
+            handshakeState = -1;
+            out.add(new TextWebSocketFrame("Accept: MOTD"));
             return;
         }
         if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 2) {
@@ -197,8 +209,166 @@ public class EaglerServerHandler extends MessageToMessageCodec<BinaryWebSocketFr
         out.add(new BinaryWebSocketFrame(in.retain()));
     }
 
+    private static class ServerInfo {
+        public final String motd;
+        public final int online;
+        public final int max;
+        public final String[] players;
+        public ServerInfo(String motd, int online, int max, String[] players) {
+            this.motd = motd;
+            this.online = online;
+            this.max = max;
+            this.players = players;
+        }
+    }
+
+    private static final AttributeKey<ServerInfo> serverInfoKey = AttributeKey.newInstance("server-info");
+    public static final AttributeKey<ByteBuf> eagIconKey = AttributeKey.newInstance("eag-icon");
+    private static final AttributeKey<ByteBuf> eagLegacyStatusKey = AttributeKey.newInstance("eag-legacy-status");
+
     @Override
-    public void decode(ChannelHandlerContext ctx, BinaryWebSocketFrame in, List<Object> out) {
+    public void decode(ChannelHandlerContext ctx, WebSocketFrame in, List<Object> out) {
+        if (in instanceof TextWebSocketFrame && handshakeState < 0) {
+            JsonObject json = JsonParser.parseString(((TextWebSocketFrame) in).text()).getAsJsonObject();
+            if (!(json.has("data") && json.get("data").isJsonObject() && (json = json.getAsJsonObject("data")).has("motd") && json.get("motd").isJsonArray() && json.has("icon") && json.get("icon").isJsonPrimitive() && json.has("online") && json.get("online").isJsonPrimitive() && json.has("max") && json.get("max").isJsonPrimitive() && json.has("players") && json.get("players").isJsonArray())) {
+                out.add(Unpooled.EMPTY_BUFFER);
+                return;
+            }
+            JsonArray motd = json.getAsJsonArray("motd");
+            StringBuilder motdSb = new StringBuilder();
+            for (JsonElement line : motd) {
+                motdSb.append(line.getAsString()).append("\n");
+            }
+            if (motdSb.length() > 0) {
+                motdSb.setLength(motdSb.length() - 1);
+            }
+            boolean icon = json.get("icon").getAsBoolean();
+            int online = json.get("online").getAsInt();
+            int max = json.get("max").getAsInt();
+            JsonArray players = json.getAsJsonArray("players");
+            if (handshakeState == -1) {
+                ByteBuf bb = ctx.alloc().buffer();
+                bb.writeByte((byte) 0xFF);
+                StringBuilder sb = new StringBuilder("§1\0");
+                sb.append(version.getVersion()).append("\0");
+                sb.append(version.getName()).append("\0");
+                sb.append(motdSb).append("\0");
+                sb.append(online).append("\0");
+                sb.append(max);
+                try {
+                    Types1_6_4.STRING.write(bb, sb.toString());
+                } catch (Exception ignored) {
+                }
+                if (icon) {
+                    ctx.channel().attr(eagLegacyStatusKey).set(bb);
+                    handshakeState = -3;
+                } else {
+                    out.add(bb);
+                }
+            } else if (icon) {
+                List<String> playerList = new ArrayList<>();
+                for (JsonElement player : players) {
+                    playerList.add(player.toString());
+                }
+                ctx.channel().attr(serverInfoKey).set(new ServerInfo(motdSb.toString(), online, max, playerList.toArray(new String[0])));
+            } else {
+                JsonObject resp = new JsonObject();
+                JsonObject versionObj = new JsonObject();
+                versionObj.addProperty("name", version.getName());
+                versionObj.addProperty("protocol", version.getVersion());
+                resp.add("version", versionObj);
+                JsonObject playersObj = new JsonObject();
+                playersObj.addProperty("max", max);
+                playersObj.addProperty("online", online);
+                if (!players.isEmpty()) {
+                    JsonArray sampleArr = new JsonArray();
+                    for (JsonElement player : players) {
+                        JsonObject playerObj = new JsonObject();
+                        playerObj.addProperty("name", player.toString());
+                        playerObj.addProperty("id", UUID.nameUUIDFromBytes(("OfflinePlayer:" + player).getBytes(StandardCharsets.UTF_8)).toString());
+                        sampleArr.add(playerObj);
+                    }
+                    playersObj.add("sample", sampleArr);
+                }
+                resp.add("players", playersObj);
+                JsonObject descriptionObj = new JsonObject();
+                descriptionObj.addProperty("text", motdSb.toString());
+                resp.add("description", descriptionObj);
+                ByteBuf bb = ctx.alloc().buffer();
+                PacketTypes.writeVarInt(bb, 0);
+                PacketTypes.writeString(bb, resp.toString());
+                out.add(bb);
+                handshakeState = -1;
+            }
+        }
+        if (!(in instanceof BinaryWebSocketFrame)) {
+            if (out.isEmpty()) {
+                out.add(Unpooled.EMPTY_BUFFER);
+            }
+            return;
+        }
+        if (handshakeState < 0) {
+            if (handshakeState == -3) {
+                handshakeState = -1;
+                if (proxyConnection instanceof ProxyConnection) {
+                    ((ProxyConnection) proxyConnection).getC2P().attr(eagIconKey).set(in.content().retain());
+                } else {
+                    ((LegacyProxyConnection) proxyConnection).getC2P().attr(eagIconKey).set(in.content().retain());
+                }
+                out.add(ctx.channel().attr(eagLegacyStatusKey).getAndSet(null));
+                return;
+            }
+            if (handshakeState == -1) {
+                out.add(Unpooled.EMPTY_BUFFER);
+                return;
+            }
+            ServerInfo serverInfo = ctx.channel().attr(serverInfoKey).getAndSet(null);
+            JsonObject resp = new JsonObject();
+            JsonObject versionObj = new JsonObject();
+            versionObj.addProperty("name", version.getName());
+            versionObj.addProperty("protocol", version.getVersion());
+            resp.add("version", versionObj);
+            JsonObject playersObj = new JsonObject();
+            playersObj.addProperty("max", serverInfo.max);
+            playersObj.addProperty("online", serverInfo.online);
+            if (serverInfo.players.length > 0) {
+                JsonArray sampleArr = new JsonArray();
+                for (String player : serverInfo.players) {
+                    JsonObject playerObj = new JsonObject();
+                    playerObj.addProperty("name", player);
+                    playerObj.addProperty("id", UUID.nameUUIDFromBytes(("OfflinePlayer:" + player).getBytes(StandardCharsets.UTF_8)).toString());
+                    sampleArr.add(playerObj);
+                }
+                playersObj.add("sample", sampleArr);
+            }
+            resp.add("players", playersObj);
+            JsonObject descriptionObj = new JsonObject();
+            descriptionObj.addProperty("text", serverInfo.motd);
+            resp.add("description", descriptionObj);
+            if (in.content().readableBytes() == 16384) {
+                BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_4BYTE_ABGR);
+                byte[] pixels = new byte[16384];
+                for (int i = 0; i < 4096; i++) {
+                    pixels[i * 4] = in.content().getByte(i * 4 + 3);
+                    pixels[i * 4 + 1] = in.content().getByte(i * 4 + 2);
+                    pixels[i * 4 + 2] = in.content().getByte(i * 4 + 1);
+                    pixels[i * 4 + 3] = in.content().getByte(i * 4);
+                }
+                image.setData(Raster.createRaster(image.getSampleModel(), new DataBufferByte(pixels, 16384), new Point()));
+                ByteArrayOutputStream os = new ByteArrayOutputStream();
+                try {
+                    ImageIO.write(image, "png", os);
+                    resp.addProperty("favicon", "data:image/png;base64," + Base64.getEncoder().encodeToString(os.toByteArray()));
+                } catch (IOException ignored) {
+                }
+            }
+            ByteBuf bb = ctx.alloc().buffer();
+            PacketTypes.writeVarInt(bb, 0);
+            PacketTypes.writeString(bb, resp.toString());
+            out.add(bb);
+            handshakeState = -1;
+            return;
+        }
         if (version.isNewerThan(VersionEnum.r1_6_4)) {
             if (handshakeState == 0) {
                 out.add(Unpooled.EMPTY_BUFFER);

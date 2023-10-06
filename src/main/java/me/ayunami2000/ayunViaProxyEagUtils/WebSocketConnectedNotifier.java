@@ -4,8 +4,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
+import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.ssl.SslCompletionEvent;
 
 import java.util.ArrayList;
@@ -52,7 +52,7 @@ public class WebSocketConnectedNotifier extends ChannelDuplexHandler {
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if (msg instanceof BinaryWebSocketFrame || msg instanceof ByteBuf) {
+        if (msg instanceof WebSocketFrame || msg instanceof ByteBuf) {
             msgsWrite.add(new MsgPromise(msg, promise));
         } else {
             ctx.write(msg, promise);
