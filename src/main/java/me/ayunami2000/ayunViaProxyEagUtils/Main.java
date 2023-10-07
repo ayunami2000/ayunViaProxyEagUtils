@@ -9,6 +9,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import io.netty.handler.codec.http.websocketx.extensions.compression.WebSocketClientCompressionHandler;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.util.AsciiString;
 import io.netty.util.AttributeKey;
 import net.lenni0451.lambdaevents.EventHandler;
 import net.raphimc.netminecraft.constants.MCPipeline;
@@ -28,6 +29,8 @@ import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
 
 import javax.net.ssl.*;
 import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.KeyManagementException;
@@ -125,6 +128,20 @@ public class Main extends ViaProxyPlugin {
         }
     }
 
+    static {
+        try {
+            Field field = HttpHeaderValues.class.getDeclaredField("UPGRADE");
+            field.setAccessible(true);
+
+            Field modifiersField = Field.class.getDeclaredField("modifiers");
+            modifiersField.setAccessible(true);
+            modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+
+            field.set(null, AsciiString.cached("Upgrade")); // some servers need it to be uppercase :/
+        } catch (NoSuchFieldException | IllegalAccessException ignored) {
+        }
+    }
+
     private static void doWsServerStuff(Channel ch, NetClient proxyConnection, Channel c2p, ServerAddress addr) throws URISyntaxException {
         ch.attr(MCPipeline.COMPRESSION_THRESHOLD_ATTRIBUTE_KEY).set(-2);
         if (proxyConnection instanceof ProxyConnection && ((ProxyConnection) proxyConnection).getServerVersion().isNewerThan(VersionEnum.r1_6_4)) {
@@ -152,7 +169,7 @@ public class Main extends ViaProxyPlugin {
             sslEngine.setNeedClientAuth(false);
             ch.pipeline().addFirst("eag-server-ssl", new SslHandler(sslEngine) {
                 @Override
-                public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+                public void channelInactive(ChannelHandlerContext ctx) {
                     if (this.handshakeFuture().cause() != null) {
                         ExceptionUtil.handleNettyException(ctx, this.handshakeFuture().cause(), null);
                     }
@@ -165,17 +182,16 @@ public class Main extends ViaProxyPlugin {
             ch.pipeline().addFirst("eag-server-http-codec", new HttpClientCodec());
         }
         url.append("://").append(addr.getAddress());
-        boolean addPort = (secure && addr.getPort() != 443) || (!secure && addr.getPort() != 80);
-        if (addPort) {
+        if ((secure && addr.getPort() != 443) || (!secure && addr.getPort() != 80)) {
             url.append(":").append(addr.getPort());
         }
+        url.append("/");
         String path = c2p.attr(wsPath).get();
         if (path != null) {
-            url.append("/").append(path);
+            url.append(path);
         }
         URI uri = new URI(url.toString());
-        HttpHeaders headers = c2p.hasAttr(EaglercraftHandler.httpHeadersKey) ? c2p.attr(EaglercraftHandler.httpHeadersKey).get() : new DefaultHttpHeaders().set(HttpHeaderNames.ORIGIN, "via.shhnowisnottheti.me");
-        headers.set(HttpHeaderNames.HOST, uri.getHost() + (addPort ? ":" + uri.getPort() : ""));
+        HttpHeaders headers = c2p.hasAttr(EaglercraftHandler.httpHeadersKey) ? c2p.attr(EaglercraftHandler.httpHeadersKey).get() : new DefaultHttpHeaders().clear().set(HttpHeaderNames.ORIGIN, "https://via.shhnowisnottheti.me");
         ch.pipeline().addAfter("eag-server-http-codec", "eag-server-http-aggregator", new HttpObjectAggregator(2097152, true));
         ch.pipeline().addAfter("eag-server-http-aggregator", "eag-server-ws-compression", WebSocketClientCompressionHandler.INSTANCE);
         ch.pipeline().addAfter("eag-server-ws-compression", "eag-server-ws-handshaker", new WebSocketClientProtocolHandler(WebSocketClientHandshakerFactory.newHandshaker(uri, WebSocketVersion.V13, null, true, headers, 2097152)));
