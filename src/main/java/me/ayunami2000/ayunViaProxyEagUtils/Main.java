@@ -99,7 +99,7 @@ public class Main extends ViaProxyPlugin {
                 c2p.attr(secureWs).set(true);
             }
 
-            if (c2p.hasAttr(secureWs)) {
+            if (c2p.hasAttr(secureWs) && c2p.attr(secureWs).get() != null) {
                 doWsServerStuff(ch, proxyConnection, c2p, addr);
                 if (!event.isLegacyPassthrough()) {
                     ch.pipeline().addFirst("handshake-waiter", new ChannelOutboundHandlerAdapter() {
