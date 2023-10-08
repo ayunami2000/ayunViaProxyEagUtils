@@ -284,12 +284,12 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                             ctx.channel().writeAndFlush(new BinaryWebSocketFrame(data.readerIndex(0).retain()));
                             break;
                         }
-                        if (!ctx.channel().hasAttr(Main.secureWs)) {
+                        if (!ctx.channel().hasAttr(Main.secureWs) || ctx.channel().attr(Main.secureWs) == null) {
                             if (packetId == ServerboundPackets1_5_2.PLUGIN_MESSAGE.getId() && Types1_6_4.STRING.read(data).startsWith("EAG|")) {
                                 break;
                             }
                         }
-                    } else if (this.version.isNewerThanOrEqualTo(VersionEnum.r1_7_2tor1_7_5) && !ctx.channel().hasAttr(Main.secureWs)) {
+                    } else if (this.version.isNewerThanOrEqualTo(VersionEnum.r1_7_2tor1_7_5) && (!ctx.channel().hasAttr(Main.secureWs) || ctx.channel().attr(Main.secureWs) == null)) {
                         final int packetId = PacketTypes.readVarInt(data);
                         if (packetId == this.pluginMessageId && PacketTypes.readString(data, 32767).startsWith("EAG|")) {
                             break;
