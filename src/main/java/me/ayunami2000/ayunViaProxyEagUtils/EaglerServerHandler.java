@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
 import com.viaversion.viaversion.util.ChatColorUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -24,7 +25,6 @@ import net.raphimc.vialegacy.api.LegacyProtocolVersion;
 import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ClientboundPackets1_5_2;
 import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ServerboundPackets1_5_2;
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
-import net.raphimc.vialoader.util.VersionEnum;
 import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
@@ -43,7 +43,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, ByteBuf> {
-    private final VersionEnum version;
+    private final ProtocolVersion version;
     private final String password;
     private final NetClient proxyConnection;
     private final Map<UUID, String> uuidStringMap = new HashMap<>();
@@ -53,7 +53,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
     private ByteBuf serverBoundPartialPacket = Unpooled.EMPTY_BUFFER;
     private ByteBuf clientBoundPartialPacket = Unpooled.EMPTY_BUFFER;
     public EaglerServerHandler(NetClient proxyConnection, String password) {
-        this.version = proxyConnection instanceof ProxyConnection ? ((ProxyConnection) proxyConnection).getServerVersion() : VersionEnum.r1_5_2;
+        this.version = proxyConnection instanceof ProxyConnection ? ((ProxyConnection) proxyConnection).getServerVersion() : LegacyProtocolVersion.r1_5_2;
         this.password = password;
         this.proxyConnection = proxyConnection;
     }
@@ -71,7 +71,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             out.add(Unpooled.EMPTY_BUFFER);
             return;
         }
-        if (version.isNewerThan(VersionEnum.r1_6_4)) {
+        if (version.newerThanOrEqualTo(ProtocolVersion.v1_7_2)) {
             if (in.readableBytes() >= 2 && in.getUnsignedByte(0) == 0xFE && in.getUnsignedByte(1) == 0x01) {
                 handshakeState = -1;
                 out.add(new TextWebSocketFrame("Accept: MOTD"));
@@ -282,7 +282,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
                 ByteBuf bb = ctx.alloc().buffer();
                 bb.writeByte((byte) 0xFF);
                 StringBuilder sb = new StringBuilder("\u00A71\0");
-                sb.append(LegacyProtocolVersion.getRealProtocolVersion(version.getVersion())).append("\0");
+                sb.append(version.getVersion()).append("\0");
                 sb.append(version.getName()).append("\0");
                 sb.append(motdSb).append("\0");
                 sb.append(online).append("\0");
@@ -307,7 +307,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
                 JsonObject resp = new JsonObject();
                 JsonObject versionObj = new JsonObject();
                 versionObj.addProperty("name", version.getName());
-                versionObj.addProperty("protocol", LegacyProtocolVersion.getRealProtocolVersion(version.getVersion()));
+                versionObj.addProperty("protocol", version.getVersion());
                 resp.add("version", versionObj);
                 JsonObject playersObj = new JsonObject();
                 playersObj.addProperty("max", max);
@@ -358,7 +358,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             JsonObject resp = new JsonObject();
             JsonObject versionObj = new JsonObject();
             versionObj.addProperty("name", version.getName());
-            versionObj.addProperty("protocol", LegacyProtocolVersion.getRealProtocolVersion(version.getVersion()));
+            versionObj.addProperty("protocol", version.getVersion());
             resp.add("version", versionObj);
             JsonObject playersObj = new JsonObject();
             playersObj.addProperty("max", serverInfo.max);
@@ -401,7 +401,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             handshakeState = -1;
             return;
         }
-        if (version.isNewerThan(VersionEnum.r1_6_4)) {
+        if (version.newerThanOrEqualTo(ProtocolVersion.v1_7_2)) {
             if (handshakeState == 0) {
                 out.add(Unpooled.EMPTY_BUFFER);
             } else if (handshakeState == 1) {
@@ -440,7 +440,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
             bb.writeBytes(clientBoundPartialPacket);
             clientBoundPartialPacket.release();
             clientBoundPartialPacket = Unpooled.EMPTY_BUFFER;
-            bb.writeBytes(in.content());
+            bb.writeBytes(in.content()); // todo: do i need to reset this??????
             int readerIndex = 0;
             try {
                 while (bb.isReadable()) {

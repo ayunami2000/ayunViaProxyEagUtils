@@ -1,6 +1,7 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
 import com.google.common.net.HostAndPort;
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
 import com.viaversion.viaversion.libs.gson.JsonArray;
 import com.viaversion.viaversion.libs.gson.JsonObject;
 import com.viaversion.viaversion.libs.gson.JsonParser;
@@ -22,9 +23,9 @@ import net.raphimc.netminecraft.constants.ConnectionState;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.constants.MCPipeline;
 import net.raphimc.netminecraft.packet.PacketTypes;
+import net.raphimc.vialegacy.api.LegacyProtocolVersion;
 import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ServerboundPackets1_5_2;
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
-import net.raphimc.vialoader.util.VersionEnum;
 import net.raphimc.viaproxy.ViaProxy;
 import net.raphimc.viaproxy.proxy.client2proxy.Client2ProxyChannelInitializer;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
@@ -53,7 +54,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
     public static final AttributeKey<HttpHeaders> httpHeadersKey = AttributeKey.newInstance("eag-http-headers");
     private HostAndPort host;
     public State state;
-    public VersionEnum version;
+    public ProtocolVersion version;
     public int pluginMessageId;
     public String username;
 
@@ -143,7 +144,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                     if (data.readableBytes() >= 2 && data.getByte(0) == 2 && data.getByte(1) == 69) {
                         data.setByte(1, 61);
                         this.state = State.LOGIN_COMPLETE;
-                        this.version = VersionEnum.r1_5_2;
+                        this.version = LegacyProtocolVersion.r1_5_2;
                         out.add(data.retain());
                         break;
                     }
@@ -197,8 +198,8 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                     }
                     Logger.LOGGER.info("Eaglercraft client connected: " + clientBrand + " " + clientVersionString);
                     this.state = State.HANDSHAKE_COMPLETE;
-                    this.version = VersionEnum.fromProtocolId(minecraftVersion);
-                    if (this.version.equals(VersionEnum.UNKNOWN)) {
+                    this.version = ProtocolVersion.getProtocol(minecraftVersion);
+                    if (this.version.equals(ProtocolVersion.unknown)) {
                         Logger.LOGGER.error("Unsupported protocol version: " + minecraftVersion);
                         ctx.close();
                         return;
@@ -278,7 +279,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                     break;
                 }
                 case LOGIN_COMPLETE: {
-                    if (this.version.equals(VersionEnum.r1_5_2)) {
+                    if (this.version.equals(LegacyProtocolVersion.r1_5_2)) {
                         final int packetId = data.readUnsignedByte();
                         if (packetId == ServerboundPackets1_5_2.SHARED_KEY.getId()) {
                             ctx.channel().writeAndFlush(new BinaryWebSocketFrame(data.readerIndex(0).retain()));
@@ -289,7 +290,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                                 break;
                             }
                         }
-                    } else if (this.version.isNewerThanOrEqualTo(VersionEnum.r1_7_2tor1_7_5) && (!ctx.channel().hasAttr(Main.secureWs) || ctx.channel().attr(Main.secureWs) == null)) {
+                    } else if (this.version.newerThanOrEqualTo(ProtocolVersion.v1_7_2) && (!ctx.channel().hasAttr(Main.secureWs) || ctx.channel().attr(Main.secureWs) == null)) {
                         final int packetId = PacketTypes.readVarInt(data);
                         if (packetId == this.pluginMessageId && PacketTypes.readString(data, 32767).startsWith("EAG|")) {
                             break;
@@ -315,7 +316,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                 return;
             }
             this.state = State.STATUS;
-            this.version = VersionEnum.r1_8;
+            this.version = ProtocolVersion.v1_8;
             if (ctx.pipeline().get(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME) != null) {
                 ctx.pipeline().remove(Client2ProxyChannelInitializer.LEGACY_PASSTHROUGH_INITIAL_HANDLER_NAME);
             }

@@ -11,7 +11,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.codec.http.websocketx.extensions.compression.WebSocketServerCompressionHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-import net.raphimc.viaproxy.plugins.PluginManager;
+import net.raphimc.viaproxy.ViaProxy;
 import net.raphimc.viaproxy.plugins.events.Client2ProxyHandlerCreationEvent;
 import net.raphimc.viaproxy.proxy.client2proxy.Client2ProxyChannelInitializer;
 import net.raphimc.viaproxy.proxy.client2proxy.passthrough.LegacyPassthroughInitialHandler;
@@ -40,8 +40,9 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
             return;
         }
         if (in.readableBytes() >= 3 || in.getByte(0) != 71) {
-            if ((in.readableBytes() >= 3 && in.getCharSequence(0, 3, StandardCharsets.UTF_8).equals("GET")) || (in.readableBytes() >= 4 && in.getCharSequence(0, 4, StandardCharsets.UTF_8).equals("POST"))) {
-                if (EaglercraftInitialHandler.sslContext != null) {
+            boolean ssl = EaglercraftInitialHandler.sslContext != null && in.readableBytes() >= 3 && in.getByte(0) == 22;
+            if (ssl || (in.readableBytes() >= 3 && in.getCharSequence(0, 3, StandardCharsets.UTF_8).equals("GET")) || (in.readableBytes() >= 4 && in.getCharSequence(0, 4, StandardCharsets.UTF_8).equals("POST"))) {
+                if (ssl) {
                     ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-ssl-handler", EaglercraftInitialHandler.sslContext.newHandler(ctx.alloc()));
                 }
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-http-codec", new HttpServerCodec());
@@ -69,7 +70,7 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
                                             }
                                         }
 
-                                        Supplier<ChannelHandler> handlerSupplier = () -> PluginManager.EVENT_MANAGER.call(new Client2ProxyHandlerCreationEvent(new PassthroughClient2ProxyHandler(), true)).getHandler();
+                                        Supplier<ChannelHandler> handlerSupplier = () -> ViaProxy.EVENT_MANAGER.call(new Client2ProxyHandlerCreationEvent(new PassthroughClient2ProxyHandler(), true)).getHandler();
                                         PassthroughClient2ProxyChannelInitializer channelInitializer = new PassthroughClient2ProxyChannelInitializer(handlerSupplier);
                                         try {
                                             initChannelMethod.invoke(channelInitializer, ctx.channel());

@@ -1,23 +1,25 @@
 package me.ayunami2000.ayunViaProxyEagUtils;
 
+import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
+import io.netty.handler.codec.compression.ZlibCodecFactory;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
 import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
-import io.netty.handler.codec.http.websocketx.extensions.compression.WebSocketClientCompressionHandler;
+import io.netty.handler.codec.http.websocketx.extensions.WebSocketClientExtensionHandler;
+import io.netty.handler.codec.http.websocketx.extensions.compression.DeflateFrameClientExtensionHandshaker;
+import io.netty.handler.codec.http.websocketx.extensions.compression.PerMessageDeflateClientExtensionHandshaker;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.AsciiString;
 import io.netty.util.AttributeKey;
 import net.lenni0451.lambdaevents.EventHandler;
 import net.raphimc.netminecraft.constants.MCPipeline;
 import net.raphimc.netminecraft.netty.connection.NetClient;
-import net.raphimc.netminecraft.util.ServerAddress;
 import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
-import net.raphimc.vialoader.util.VersionEnum;
-import net.raphimc.viaproxy.plugins.PluginManager;
+import net.raphimc.viaproxy.ViaProxy;
 import net.raphimc.viaproxy.plugins.ViaProxyPlugin;
 import net.raphimc.viaproxy.plugins.events.Client2ProxyChannelInitializeEvent;
 import net.raphimc.viaproxy.plugins.events.Proxy2ServerChannelInitializeEvent;
@@ -31,6 +33,8 @@ import javax.net.ssl.*;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.KeyManagementException;
@@ -70,8 +74,8 @@ public class Main extends ViaProxyPlugin {
     }
 
     public void onEnable() {
-        PluginManager.EVENT_MANAGER.register(this);
-        (new FunnyConfig(new File("ViaLoader", "vpeagutils.yml"))).reloadConfig();
+        ViaProxy.EVENT_MANAGER.register(this);
+        (new FunnyConfig(new File("ViaLoader", "vpeagutils.yml"))).reload();
         EaglerXSkinHandler.skinService = new SkinService();
     }
 
@@ -82,7 +86,7 @@ public class Main extends ViaProxyPlugin {
 
             NetClient proxyConnection;
             Channel c2p;
-            ServerAddress addr;
+            SocketAddress addr;
             if (event.isLegacyPassthrough()) {
                 proxyConnection = LegacyProxyConnection.fromChannel(ch);
                 c2p = ((LegacyProxyConnection) proxyConnection).getC2P();
@@ -99,8 +103,8 @@ public class Main extends ViaProxyPlugin {
                 c2p.attr(secureWs).set(true);
             }
 
-            if (c2p.hasAttr(secureWs) && c2p.attr(secureWs).get() != null) {
-                doWsServerStuff(ch, proxyConnection, c2p, addr);
+            if (c2p.hasAttr(secureWs) && c2p.attr(secureWs).get() != null && addr instanceof InetSocketAddress) {
+                doWsServerStuff(ch, proxyConnection, c2p, (InetSocketAddress) addr);
                 if (!event.isLegacyPassthrough()) {
                     ch.pipeline().addFirst("handshake-waiter", new ChannelOutboundHandlerAdapter() {
                         private boolean hasHandshake = false;
@@ -142,9 +146,9 @@ public class Main extends ViaProxyPlugin {
         }
     }
 
-    private static void doWsServerStuff(Channel ch, NetClient proxyConnection, Channel c2p, ServerAddress addr) throws URISyntaxException {
+    private static void doWsServerStuff(Channel ch, NetClient proxyConnection, Channel c2p, InetSocketAddress addr) throws URISyntaxException {
         ch.attr(MCPipeline.COMPRESSION_THRESHOLD_ATTRIBUTE_KEY).set(-2);
-        if (proxyConnection instanceof ProxyConnection && ((ProxyConnection) proxyConnection).getServerVersion().isNewerThan(VersionEnum.r1_6_4)) {
+        if (proxyConnection instanceof ProxyConnection && ((ProxyConnection) proxyConnection).getServerVersion().newerThanOrEqualTo(ProtocolVersion.v1_7_2)) {
             ch.pipeline().remove(MCPipeline.SIZER_HANDLER_NAME);
         } else if (ch.pipeline().get(MCPipeline.ENCRYPTION_HANDLER_NAME) != null) {
             ch.pipeline().remove(MCPipeline.ENCRYPTION_HANDLER_NAME);
@@ -164,7 +168,7 @@ public class Main extends ViaProxyPlugin {
         StringBuilder url = new StringBuilder("ws");
         boolean secure = c2p.attr(secureWs).get();
         if (secure) {
-            final SSLEngine sslEngine = sc.createSSLEngine(addr.getAddress(), addr.getPort());
+            final SSLEngine sslEngine = sc.createSSLEngine(addr.getHostString(), addr.getPort());
             sslEngine.setUseClientMode(true);
             sslEngine.setNeedClientAuth(false);
             ch.pipeline().addFirst("eag-server-ssl", new SslHandler(sslEngine) {
@@ -181,7 +185,7 @@ public class Main extends ViaProxyPlugin {
         } else {
             ch.pipeline().addFirst("eag-server-http-codec", new HttpClientCodec());
         }
-        url.append("://").append(addr.getAddress());
+        url.append("://").append(addr.getHostString());
         if ((secure && addr.getPort() != 443) || (!secure && addr.getPort() != 80)) {
             url.append(":").append(addr.getPort());
         }
@@ -193,7 +197,7 @@ public class Main extends ViaProxyPlugin {
         URI uri = new URI(url.toString());
         HttpHeaders headers = c2p.hasAttr(EaglercraftHandler.httpHeadersKey) ? c2p.attr(EaglercraftHandler.httpHeadersKey).get() : new DefaultHttpHeaders().clear().set(HttpHeaderNames.ORIGIN, "https://via.shhnowisnottheti.me");
         ch.pipeline().addAfter("eag-server-http-codec", "eag-server-http-aggregator", new HttpObjectAggregator(2097152, true));
-        ch.pipeline().addAfter("eag-server-http-aggregator", "eag-server-ws-compression", WebSocketClientCompressionHandler.INSTANCE);
+        ch.pipeline().addAfter("eag-server-http-aggregator", "eag-server-ws-compression", new WebSocketClientExtensionHandler(new PerMessageDeflateClientExtensionHandshaker(1, ZlibCodecFactory.isSupportingWindowSizeAndMemLevel(), 15, false, false), new DeflateFrameClientExtensionHandshaker(1, false), new DeflateFrameClientExtensionHandshaker(1, true)));
         ch.pipeline().addAfter("eag-server-ws-compression", "eag-server-ws-handshaker", new WebSocketClientProtocolHandler(WebSocketClientHandshakerFactory.newHandshaker(uri, WebSocketVersion.V13, null, true, headers, 2097152)));
         ch.pipeline().addAfter("eag-server-ws-handshaker", "eag-server-ws-ready", new WebSocketConnectedNotifier());
         ch.pipeline().addAfter("eag-server-ws-ready", "eag-server-handler", new EaglerServerHandler(proxyConnection, c2p.attr(eagxPass).get()));
@@ -239,6 +243,7 @@ public class Main extends ViaProxyPlugin {
                     } else {
                         ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-x-login", new EaglerXLoginHandler());
                         ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-skin-x", new EaglerXSkinHandler());
+                        ctx.pipeline().addBefore("eaglercraft-handler", "ayun-eag-voice", new EaglerVoiceHandler(null));
                     }
                 } catch (Exception ignored) {
                 }
