@@ -50,11 +50,11 @@ public class ConnectionHandshake {
             d.writeShort(1); // supported game protocols count
             d.writeShort(proxyConnection.getServerVersion().getVersion()); // client supports this protocol
 
-            String clientBrand = "ViaProxy";
+            String clientBrand = "eagler";
             d.writeByte(clientBrand.length());
             d.writeBytes(clientBrand);
 
-            String clientVers = ViaProxy.VERSION;
+            String clientVers = "1.8.8";
             d.writeByte(clientVers.length());
             d.writeBytes(clientVers);
 
