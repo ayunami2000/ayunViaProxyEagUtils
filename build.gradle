@@ -12,3 +12,8 @@ repositories {
 dependencies {
     implementation files("libs/ViaProxy-3.2.2+java8.jar")
 }
+
+task downloadFile(type: Download) {
+    src 'https://github.com/ViaVersion/ViaProxy/releases/download/v3.2.2/ViaProxy-3.2.2+java8.jar'
+    dest 'libs'
+}
