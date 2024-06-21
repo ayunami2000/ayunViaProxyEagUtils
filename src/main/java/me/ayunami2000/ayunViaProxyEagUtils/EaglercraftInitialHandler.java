@@ -30,6 +30,7 @@ import java.util.function.Supplier;
 public class EaglercraftInitialHandler extends ByteToMessageDecoder {
     private static final Method initChannelMethod;
     public static SslContext sslContext;
+    private static long lastTime = 0;
 
     @Override
     protected void decode(final ChannelHandlerContext ctx, final ByteBuf in, final List<Object> out) {
@@ -40,10 +41,11 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
             return;
         }
         if (in.readableBytes() >= 3 || in.getByte(0) != 71) {
-            boolean ssl = EaglercraftInitialHandler.sslContext != null && in.readableBytes() >= 3 && in.getByte(0) == 22;
+            renewCerts();
+            boolean ssl = sslContext != null && in.readableBytes() >= 3 && in.getByte(0) == 22;
             if (ssl || (in.readableBytes() >= 3 && in.getCharSequence(0, 3, StandardCharsets.UTF_8).equals("GET")) || (in.readableBytes() >= 4 && in.getCharSequence(0, 4, StandardCharsets.UTF_8).equals("POST"))) {
                 if (ssl) {
-                    ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-ssl-handler", EaglercraftInitialHandler.sslContext.newHandler(ctx.alloc()));
+                    ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-ssl-handler", sslContext.newHandler(ctx.alloc()));
                 }
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-http-codec", new HttpServerCodec());
                 ctx.pipeline().addBefore("eaglercraft-initial-handler", "ws-http-aggregator", new HttpObjectAggregator(65535, true));
@@ -98,15 +100,22 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
         }
     }
 
-    static {
+    public static void renewCerts() {
+        final long currTime = System.currentTimeMillis();
+        if (currTime - lastTime <= 1000 * 60 * 60) return;
+        lastTime = currTime;
         final File certFolder = new File("certs");
         if (certFolder.exists()) {
             try {
-                EaglercraftInitialHandler.sslContext = SslContextBuilder.forServer(new File(certFolder, "fullchain.pem"), new File(certFolder, "privkey.pem")).build();
+                sslContext = SslContextBuilder.forServer(new File(certFolder, "fullchain.pem"), new File(certFolder, "privkey.pem")).build();
             } catch (Throwable e) {
                 throw new RuntimeException("Failed to load SSL context", e);
             }
         }
+    }
+
+    static {
+        renewCerts();
         try {
             initChannelMethod = PassthroughClient2ProxyChannelInitializer.class.getDeclaredMethod("initChannel", Channel.class);
             initChannelMethod.setAccessible(true);
@@ -121,6 +130,6 @@ public class EaglercraftInitialHandler extends ByteToMessageDecoder {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        ExceptionUtil.handleNettyException(ctx, cause, null);
+        ExceptionUtil.handleNettyException(ctx, cause, null, true);
     }
 }

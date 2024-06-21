@@ -10,5 +10,5 @@ repositories {
 }
 
 dependencies {
-    implementation files("libs/ViaProxy-3.2.0-SNAPSHOT+java8.jar")
+    implementation files("libs/ViaProxy-3.3.0-SNAPSHOT+java8.jar")
 }

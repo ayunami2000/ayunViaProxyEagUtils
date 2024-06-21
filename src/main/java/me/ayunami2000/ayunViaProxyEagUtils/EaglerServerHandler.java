@@ -22,9 +22,9 @@ import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.netty.connection.NetClient;
 import net.raphimc.netminecraft.packet.PacketTypes;
 import net.raphimc.vialegacy.api.LegacyProtocolVersion;
-import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ClientboundPackets1_5_2;
-import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ServerboundPackets1_5_2;
-import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
+import net.raphimc.vialegacy.protocol.release.r1_5_2tor1_6_1.packet.ClientboundPackets1_5_2;
+import net.raphimc.vialegacy.protocol.release.r1_5_2tor1_6_1.packet.ServerboundPackets1_5_2;
+import net.raphimc.vialegacy.protocol.release.r1_6_4tor1_7_2_5.types.Types1_6_4;
 import net.raphimc.viaproxy.proxy.session.LegacyProxyConnection;
 import net.raphimc.viaproxy.proxy.session.ProxyConnection;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
@@ -60,7 +60,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        ExceptionUtil.handleNettyException(ctx, cause, null);
+        ExceptionUtil.handleNettyException(ctx, cause, null, true);
     }
 
     private int handshakeState = 0;
@@ -412,7 +412,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
                 handshakeState = 3;
                 ConnectionHandshake.attemptHandshake3(ctx.channel(), ByteBufUtil.getBytes(in.content()), (ProxyConnection) proxyConnection);
                 ByteBuf bb = ctx.alloc().buffer();
-                PacketTypes.writeVarInt(bb, MCPackets.S2C_LOGIN_SUCCESS.getId(version.getVersion()));
+                PacketTypes.writeVarInt(bb, MCPackets.S2C_LOGIN_GAME_PROFILE.getId(version.getVersion()));
                 PacketTypes.writeString(bb, ((ProxyConnection) proxyConnection).getGameProfile().getId().toString());
                 PacketTypes.writeString(bb, ((ProxyConnection) proxyConnection).getGameProfile().getName());
                 out.add(bb);
@@ -421,7 +421,7 @@ public class EaglerServerHandler extends MessageToMessageCodec<WebSocketFrame, B
                 ConnectionHandshake.attemptHandshake4(ctx.channel(), ByteBufUtil.getBytes(in.content()), (ProxyConnection) proxyConnection);
                 out.add(Unpooled.EMPTY_BUFFER);
             } else {
-                if (in.content().getByte(0) == MCPackets.S2C_LOGIN_SUCCESS.getId(version.getVersion()) && in.content().getByte(1) == 0 && in.content().getByte(2) == 2) {
+                if (in.content().getByte(0) == MCPackets.S2C_LOGIN_GAME_PROFILE.getId(version.getVersion()) && in.content().getByte(1) == 0 && in.content().getByte(2) == 2) {
                     out.add(Unpooled.EMPTY_BUFFER);
                     return;
                 }

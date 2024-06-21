@@ -24,8 +24,8 @@ import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.constants.MCPipeline;
 import net.raphimc.netminecraft.packet.PacketTypes;
 import net.raphimc.vialegacy.api.LegacyProtocolVersion;
-import net.raphimc.vialegacy.protocols.release.protocol1_6_1to1_5_2.ServerboundPackets1_5_2;
-import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
+import net.raphimc.vialegacy.protocol.release.r1_5_2tor1_6_1.packet.ServerboundPackets1_5_2;
+import net.raphimc.vialegacy.protocol.release.r1_6_4tor1_7_2_5.types.Types1_6_4;
 import net.raphimc.viaproxy.ViaProxy;
 import net.raphimc.viaproxy.proxy.client2proxy.Client2ProxyChannelInitializer;
 import net.raphimc.viaproxy.proxy.util.ExceptionUtil;
@@ -258,7 +258,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                             throw new IllegalArgumentException("Too much data in packet: " + data.readableBytes() + " bytes");
                         }
                         this.state = State.LOGIN_COMPLETE;
-                        this.pluginMessageId = MCPackets.C2S_PLUGIN_MESSAGE.getId(this.version.getVersion());
+                        this.pluginMessageId = MCPackets.C2S_CUSTOM_PAYLOAD.getId(this.version.getVersion());
                         if (this.pluginMessageId == -1) {
                             Logger.LOGGER.error("Unsupported protocol version: " + this.version.getVersion());
                             ctx.close();
@@ -286,7 +286,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
                             break;
                         }
                         if (!ctx.channel().hasAttr(Main.secureWs) || ctx.channel().attr(Main.secureWs) == null) {
-                            if (packetId == ServerboundPackets1_5_2.PLUGIN_MESSAGE.getId() && Types1_6_4.STRING.read(data).startsWith("EAG|")) {
+                            if (packetId == ServerboundPackets1_5_2.CUSTOM_PAYLOAD.getId() && Types1_6_4.STRING.read(data).startsWith("EAG|")) {
                                 break;
                             }
                         }
@@ -364,7 +364,7 @@ public class EaglercraftHandler extends MessageToMessageCodec<WebSocketFrame, By
     }
 
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        ExceptionUtil.handleNettyException(ctx, cause, null);
+        ExceptionUtil.handleNettyException(ctx, cause, null, true);
     }
 
     public enum State {

@@ -18,7 +18,7 @@ import io.netty.util.AttributeKey;
 import net.lenni0451.lambdaevents.EventHandler;
 import net.raphimc.netminecraft.constants.MCPipeline;
 import net.raphimc.netminecraft.netty.connection.NetClient;
-import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
+import net.raphimc.vialegacy.protocol.release.r1_6_4tor1_7_2_5.types.Types1_6_4;
 import net.raphimc.viaproxy.ViaProxy;
 import net.raphimc.viaproxy.plugins.ViaProxyPlugin;
 import net.raphimc.viaproxy.plugins.events.Client2ProxyChannelInitializeEvent;
@@ -175,7 +175,7 @@ public class Main extends ViaProxyPlugin {
                 @Override
                 public void channelInactive(ChannelHandlerContext ctx) {
                     if (this.handshakeFuture().cause() != null) {
-                        ExceptionUtil.handleNettyException(ctx, this.handshakeFuture().cause(), null);
+                        ExceptionUtil.handleNettyException(ctx, this.handshakeFuture().cause(), null, true);
                     }
                     super.closeOutbound();
                 }
@@ -226,7 +226,7 @@ public class Main extends ViaProxyPlugin {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            ExceptionUtil.handleNettyException(ctx, cause, null);
+            ExceptionUtil.handleNettyException(ctx, cause, null, true);
         }
     }
 
@@ -255,7 +255,7 @@ public class Main extends ViaProxyPlugin {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            ExceptionUtil.handleNettyException(ctx, cause, null);
+            ExceptionUtil.handleNettyException(ctx, cause, null, true);
         }
     }
 }

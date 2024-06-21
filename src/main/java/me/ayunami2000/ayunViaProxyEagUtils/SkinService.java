@@ -25,7 +25,7 @@ public class SkinService {
 
     private static void sendData(final ChannelHandlerContext ctx, final byte[] data) {
         final ByteBuf bb = ctx.alloc().buffer();
-        PacketTypes.writeVarInt(bb, MCPackets.S2C_PLUGIN_MESSAGE.getId((((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).version).getVersion()));
+        PacketTypes.writeVarInt(bb, MCPackets.S2C_CUSTOM_PAYLOAD.getId((((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).version).getVersion()));
         PacketTypes.writeString(bb, "EAG|Skins-1.8");
         bb.writeBytes(data);
         ctx.writeAndFlush(new BinaryWebSocketFrame(bb));

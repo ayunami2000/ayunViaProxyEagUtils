@@ -7,6 +7,7 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class FunnyConfig extends Config {
     public static boolean premiumSkins = false;
@@ -15,7 +16,7 @@ public class FunnyConfig extends Config {
     public static int eaglerServerMode = 0;
 
     protected FunnyConfig(File configFile) {
-        super(configFile);
+        super(configFile, Logger.getLogger("FunnyConfig"));
     }
 
     @Override

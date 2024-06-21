@@ -18,7 +18,7 @@ public class EaglerXLoginHandler extends ChannelOutboundHandlerAdapter {
     @Override
     @SuppressWarnings("deprecation")
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        ExceptionUtil.handleNettyException(ctx, cause, null);
+        ExceptionUtil.handleNettyException(ctx, cause, null, true);
     }
 
     @Override

@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import net.raphimc.netminecraft.constants.MCPackets;
 import net.raphimc.netminecraft.packet.PacketTypes;
-import net.raphimc.vialegacy.protocols.release.protocol1_7_2_5to1_6_4.types.Types1_6_4;
+import net.raphimc.vialegacy.protocol.release.r1_6_4tor1_7_2_5.types.Types1_6_4;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -165,7 +165,7 @@ public class VoiceServerImpl {
 			bb.setShort(21, bb.writerIndex() - 23);
 		} else {
 			if (pluginMessageId <= 0) {
-				pluginMessageId = MCPackets.S2C_PLUGIN_MESSAGE.getId((((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).version).getVersion());
+				pluginMessageId = MCPackets.S2C_CUSTOM_PAYLOAD.getId((((EaglercraftHandler) ctx.pipeline().get("eaglercraft-handler")).version).getVersion());
 			}
 			PacketTypes.writeVarInt(bb, pluginMessageId);
 			PacketTypes.writeString(bb, "EAG|Voice-1.8");
