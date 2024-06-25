@@ -17,7 +17,9 @@ import io.netty.util.AsciiString;
 import io.netty.util.AttributeKey;
 import net.lenni0451.lambdaevents.EventHandler;
 import net.raphimc.netminecraft.constants.MCPipeline;
+import net.raphimc.netminecraft.netty.codec.PacketCodec;
 import net.raphimc.netminecraft.netty.connection.NetClient;
+import net.raphimc.netminecraft.packet.IPacket;
 import net.raphimc.vialegacy.protocol.release.r1_6_4tor1_7_2_5.types.Types1_6_4;
 import net.raphimc.viaproxy.ViaProxy;
 import net.raphimc.viaproxy.plugins.ViaProxyPlugin;
@@ -201,6 +203,15 @@ public class Main extends ViaProxyPlugin {
         ch.pipeline().addAfter("eag-server-ws-compression", "eag-server-ws-handshaker", new WebSocketClientProtocolHandler(WebSocketClientHandshakerFactory.newHandshaker(uri, WebSocketVersion.V13, null, true, headers, 2097152)));
         ch.pipeline().addAfter("eag-server-ws-handshaker", "eag-server-ws-ready", new WebSocketConnectedNotifier());
         ch.pipeline().addAfter("eag-server-ws-ready", "eag-server-handler", new EaglerServerHandler(proxyConnection, c2p.attr(eagxPass).get()));
+        ch.pipeline().replace(MCPipeline.PACKET_CODEC_HANDLER_NAME, MCPipeline.PACKET_CODEC_HANDLER_NAME, new PacketCodec() {
+            protected void encode(ChannelHandlerContext ctx, IPacket in, ByteBuf out) {
+                try {
+                    super.encode(ctx, in, out);
+                } catch (IllegalStateException e) {
+                    //
+                }
+            }
+        });
     }
 
     @EventHandler
